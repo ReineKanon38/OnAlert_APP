@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: onalert-api
+    env: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: SECURITY_SEED_EMAIL
+        value: guardia@onalert.local
+      - key: SECURITY_SEED_PASSWORD
+        sync: false
+      - key: SECURITY_SEED_NAME
+        value: Guardia Demo
