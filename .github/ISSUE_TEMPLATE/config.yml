@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Pregunta tecnica
+    url: https://github.com/ReineKanon38/OnAlert_APP/discussions
+    about: Usa Discussions para dudas que no son bugs ni features.

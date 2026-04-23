@@ -1,0 +1,49 @@
+name: Bug report
+description: Reporta un fallo para corregirlo rapido.
+title: "[BUG] "
+labels:
+  - bug
+body:
+  - type: dropdown
+    id: modulo
+    attributes:
+      label: Modulo afectado
+      options:
+        - app_movil
+        - backend
+        - dashboard_guardias
+    validations:
+      required: true
+
+  - type: textarea
+    id: descripcion
+    attributes:
+      label: Descripcion del problema
+      placeholder: Que pasa y que deberia pasar.
+    validations:
+      required: true
+
+  - type: textarea
+    id: pasos
+    attributes:
+      label: Pasos para reproducir
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidencia
+    attributes:
+      label: Evidencia
+      description: Logs, screenshots o videos.
+
+  - type: textarea
+    id: impacto
+    attributes:
+      label: Impacto
+      placeholder: Usuarios afectados, severidad, workaround si existe.
+    validations:
+      required: true

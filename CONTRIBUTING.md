@@ -86,3 +86,42 @@ Ejemplos:
   - `backend/`
   - `dashboard_guardias/`
 - Evitar commits mezclados entre frontend, backend y movil salvo cambios de integracion.
+
+## 9) Checklists de PR por modulo
+
+Los PR deben usar el template del repositorio y completar la seccion del modulo afectado.
+
+- Movil (`app_movil`): build local, smoke test de login y navegacion basica, evidencia visual.
+- Backend (`backend`): pruebas locales o script de verificacion, endpoints criticos validados.
+- Dashboard (`dashboard_guardias`): build exitoso, validacion de vistas afectadas, evidencia visual.
+
+Ver template: `.github/PULL_REQUEST_TEMPLATE.md`.
+
+## 10) Versionado y tags
+
+Se usa SemVer con prefijo `v`:
+
+- `vMAJOR.MINOR.PATCH`
+- Ejemplo: `v0.2.0`
+
+Reglas sugeridas:
+
+- `PATCH`: bugfixes sin romper contratos.
+- `MINOR`: nuevas features compatibles.
+- `MAJOR`: cambios incompatibles.
+
+Flujo rapido de release:
+
+1. Crear `release/*` desde `develop`.
+2. Cerrar fixes de estabilizacion.
+3. Merge a `main`.
+4. Crear tag anotado y push:
+
+```bash
+git checkout main
+git pull
+git tag -a v0.1.0 -m "Release v0.1.0"
+git push origin v0.1.0
+```
+
+Guia completa: `RELEASE.md`.

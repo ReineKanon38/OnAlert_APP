@@ -1,0 +1,49 @@
+name: Feature request
+description: Propone una mejora funcional.
+title: "[FEATURE] "
+labels:
+  - enhancement
+body:
+  - type: dropdown
+    id: modulo
+    attributes:
+      label: Modulo objetivo
+      options:
+        - app_movil
+        - backend
+        - dashboard_guardias
+        - cross-module
+    validations:
+      required: true
+
+  - type: textarea
+    id: problema
+    attributes:
+      label: Problema a resolver
+      placeholder: Que dolor actual elimina esta feature.
+    validations:
+      required: true
+
+  - type: textarea
+    id: propuesta
+    attributes:
+      label: Propuesta
+      placeholder: Describir comportamiento esperado y alcance.
+    validations:
+      required: true
+
+  - type: textarea
+    id: criterios
+    attributes:
+      label: Criterios de aceptacion
+      placeholder: |
+        - [ ] Criterio 1
+        - [ ] Criterio 2
+    validations:
+      required: true
+
+  - type: textarea
+    id: impacto
+    attributes:
+      label: Impacto esperado
+      placeholder: KPI, experiencia de usuario, riesgo, dependencias.
