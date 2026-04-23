@@ -203,3 +203,52 @@ Como funcionan:
 - Usan filtros por path para no correr todo si no hace falta.
 
 Nota: los checks exactos que aparezcan en Branch Protection los veras en el dropdown de GitHub despues de la primera ejecucion exitosa de cada workflow.
+
+## 12) Cierre automatico de Branch Protection
+
+Si quieres dejar esto aplicado en minutos sin hacerlo manualmente en UI, usa:
+
+- `scripts/setup_branch_protection.ps1`
+
+Que hace este script:
+
+- Configura proteccion para `main` y `develop` via GitHub API.
+- Exige PR con aprobacion minima.
+- Activa resolucion de conversaciones.
+- Activa historial lineal.
+- Bloquea force-push y borrado de rama.
+- Marca checks requeridos:
+	- `backend-check`
+	- `dashboard-build`
+	- `flutter-quality`
+
+Prerequisitos:
+
+1. Crear un Personal Access Token (GitHub) con permisos de administracion del repo.
+2. Exportar token en terminal:
+
+```powershell
+$env:GITHUB_TOKEN = "tu_token"
+```
+
+Ejecucion:
+
+```powershell
+./scripts/setup_branch_protection.ps1
+```
+
+Si necesitas otro repo/owner:
+
+```powershell
+./scripts/setup_branch_protection.ps1 -Owner "mi_owner" -Repo "mi_repo"
+```
+
+## 13) Definicion de listo (Done)
+
+Considera este setup cerrado cuando se cumpla todo:
+
+1. Templates de issue y PR visibles en GitHub.
+2. Workflows corriendo en Actions sin errores.
+3. `main` y `develop` con branch protection activa.
+4. Required checks configurados con los 3 jobs.
+5. Equipo creando ramas desde `develop` y mergeando solo por PR.
