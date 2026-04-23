@@ -145,3 +145,61 @@ Antes de mergear:
 3. Hay evidencia minima.
 4. Riesgo y rollback estan claros.
 5. El alcance coincide con el issue.
+
+## 10) Branch Protection y checks obligatorios
+
+Para que el proceso sea obligatorio (y no opcional), configura reglas de proteccion en GitHub.
+
+### A) Regla para `main`
+
+En GitHub:
+
+1. Settings -> Branches -> Add branch protection rule.
+2. Branch name pattern: `main`.
+3. Activa:
+	- Require a pull request before merging.
+	- Require approvals (recomendado: 1 o 2).
+	- Dismiss stale approvals when new commits are pushed.
+	- Require status checks to pass before merging.
+	- Require branches to be up to date before merging.
+	- Include administrators (recomendado).
+	- Restrict who can push to matching branches (opcional, recomendado).
+
+Checks recomendados para marcar como required:
+
+- `backend-check`
+- `dashboard-build`
+- `flutter-quality`
+
+### B) Regla para `develop`
+
+Repite el proceso con branch name pattern `develop`.
+
+Minimo recomendado:
+
+- PR obligatorio.
+- 1 aprobacion minima.
+- Status checks obligatorios.
+
+### C) Regla para `release/*` y `hotfix/*`
+
+Opcional pero recomendado en equipos:
+
+- Pattern `release/*`: requerir PR + checks.
+- Pattern `hotfix/*`: permitir velocidad, pero mantener checks.
+
+## 11) CI implementado en el repo
+
+Ya existen workflows en `.github/workflows/`:
+
+- `backend-ci.yml` -> job `backend-check`
+- `dashboard-ci.yml` -> job `dashboard-build`
+- `app-movil-ci.yml` -> job `flutter-quality`
+
+Como funcionan:
+
+- Se ejecutan en PR cuando hay cambios del modulo correspondiente.
+- Se ejecutan en push a `main`, `develop`, `release/**`, `hotfix/**`.
+- Usan filtros por path para no correr todo si no hace falta.
+
+Nota: los checks exactos que aparezcan en Branch Protection los veras en el dropdown de GitHub despues de la primera ejecucion exitosa de cada workflow.

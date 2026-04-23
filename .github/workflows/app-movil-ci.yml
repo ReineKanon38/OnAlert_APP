@@ -1,0 +1,42 @@
+name: App Movil CI
+
+on:
+  pull_request:
+    paths:
+      - "app_movil/**"
+      - ".github/workflows/app-movil-ci.yml"
+  push:
+    branches:
+      - main
+      - develop
+      - "release/**"
+      - "hotfix/**"
+    paths:
+      - "app_movil/**"
+      - ".github/workflows/app-movil-ci.yml"
+
+jobs:
+  flutter-quality:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: app_movil
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Run tests
+        run: flutter test
