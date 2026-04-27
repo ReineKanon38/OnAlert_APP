@@ -1,0 +1,40 @@
+﻿erDiagram
+  USERS {
+    BIGSERIAL id PK
+    TEXT email UK
+    TEXT nombre
+    TEXT matricula UK
+    TEXT password_hash
+    TEXT role
+    BOOLEAN vigente
+    TEXT foto_url
+    TIMESTAMPTZ created_at
+  }
+
+  ALERTS {
+    BIGSERIAL id PK
+    BIGINT user_id FK
+    DOUBLE latitude
+    DOUBLE longitude
+    TEXT descripcion
+    TEXT estado
+    TEXT prioridad
+    TEXT observacion
+    BIGINT handled_by
+    TIMESTAMPTZ created_at
+    TIMESTAMPTZ updated_at
+  }
+
+  ALERT_STATUS_LOGS {
+    BIGSERIAL id PK
+    BIGINT alert_id FK
+    BIGINT changed_by
+    TEXT previous_status
+    TEXT new_status
+    TEXT observacion
+    TIMESTAMPTZ changed_at
+  }
+
+  USERS ||--o{ ALERTS : user_id
+  ALERTS ||--o{ ALERT_STATUS_LOGS : alert_id
+

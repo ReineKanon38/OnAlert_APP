@@ -926,22 +926,27 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
   }
 
   Future<void> _importFromPhoneContacts() async {
-    final hasPermission = await FlutterContacts.requestPermission(
-      readonly: true,
+    final hasPermission = await FlutterContacts.permissions.has(
+      PermissionType.read,
     );
     if (!hasPermission) {
-      if (!mounted) {
+      final status = await FlutterContacts.permissions.request(
+        PermissionType.read,
+      );
+      if (status != PermissionStatus.granted &&
+          status != PermissionStatus.limited) {
+        if (!mounted) {
+          return;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Permiso de contactos denegado.')),
+        );
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Permiso de contactos denegado.')),
-      );
-      return;
     }
 
-    final phoneContacts = await FlutterContacts.getContacts(
-      withProperties: true,
-      withPhoto: false,
+    final phoneContacts = await FlutterContacts.getAll(
+      properties: {ContactProperty.name, ContactProperty.phone},
     );
 
     final options = phoneContacts
@@ -951,7 +956,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
             RegExp(r'[^0-9+]'),
             '',
           );
-          final name = c.displayName.trim();
+          final name = (c.displayName ?? '').trim();
           return _SupportContact(
             nombre: name.isEmpty ? 'Sin nombre' : name,
             telefono: phone,

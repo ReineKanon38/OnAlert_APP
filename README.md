@@ -53,3 +53,5 @@ git push -u origin feature/nombre-corto
 Guia completa en `CONTRIBUTING.md`.
 
 Guia operativa paso a paso en `WORKFLOW_GUIDE.md`.
+
+Guia de diagramas UML y modelo de BD en `UML_SUPABASE_GUIDE.md`.

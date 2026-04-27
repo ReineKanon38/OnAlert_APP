@@ -1,0 +1,40 @@
+﻿flowchart LR
+  subgraph Mobile[app_movil - Flutter]
+    M1[UI app_shell.dart]
+    M2[auth_service.dart]
+    M3[socket_service.dart]
+    M4[HTTP/Socket Client]
+    M1 --> M2
+    M1 --> M3
+    M2 --> M4
+    M3 --> M4
+  end
+
+  subgraph Dashboard[dashboard_guardias - React + Vite]
+    D1[App.tsx]
+    D2[api.ts]
+    D3[Socket.io client]
+    D1 --> D2
+    D1 --> D3
+  end
+
+  subgraph Backend[backend - Node.js/Express]
+    B1[REST API]
+    B2[JWT/Auth]
+    B3[Socket.io Server]
+    B4[Nodemailer]
+    B5[PostgreSQL adapter pg]
+    B1 --> B2
+    B1 --> B5
+    B1 --> B4
+    B3 --> B5
+  end
+
+  DB[(Supabase PostgreSQL)]
+
+  Mobile -->|HTTP + JWT| Backend
+  Mobile -->|WebSocket| Backend
+  Dashboard -->|HTTP + JWT| Backend
+  Dashboard -->|WebSocket| Backend
+  Backend --> DB
+

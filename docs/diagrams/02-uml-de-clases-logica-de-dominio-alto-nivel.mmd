@@ -1,0 +1,40 @@
+﻿classDiagram
+  class User {
+    +id: bigint
+    +email: text
+    +nombre: text
+    +matricula: text
+    +role: text
+    +vigente: boolean
+    +foto_url: text
+    +created_at: timestamptz
+  }
+
+  class Alert {
+    +id: bigint
+    +user_id: bigint
+    +latitude: double
+    +longitude: double
+    +descripcion: text
+    +estado: text
+    +prioridad: text
+    +observacion: text
+    +handled_by: bigint?
+    +created_at: timestamptz
+    +updated_at: timestamptz
+  }
+
+  class AlertStatusLog {
+    +id: bigint
+    +alert_id: bigint
+    +changed_by: bigint?
+    +previous_status: text?
+    +new_status: text
+    +observacion: text?
+    +changed_at: timestamptz
+  }
+
+  User "1" --> "0..*" Alert : crea
+  Alert "1" --> "0..*" AlertStatusLog : historial
+  User "0..1" --> "0..*" AlertStatusLog : cambia_estado
+
