@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Alert, User } from '../types';
 import { StatusHistory } from './StatusHistory';
+import { ReportViewer } from './ReportViewer';
 import '../styles/alert-detail.css';
 
 interface AlertDetailProps {
@@ -30,6 +31,7 @@ export function AlertDetail({
   const [observacion, setObservacion] = useState('');
   const [updating, setUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showReport, setShowReport] = useState(false);
 
   if (!alert) return null;
 
@@ -80,6 +82,9 @@ export function AlertDetail({
         </div>
 
         {/* Contenido con scroll */}
+        {showReport && (
+          <ReportViewer alertId={alert.id} onClose={() => setShowReport(false)} />
+        )}
         <div className="alert-detail-content">
           {/* Información del usuario */}
           <section className="alert-detail-section">
@@ -167,6 +172,15 @@ export function AlertDetail({
           <section className="alert-detail-section">
             <StatusHistory alertId={alert.id} currentUser={currentUser} />
           </section>
+
+          {/* Reporte */}
+          {(alert.estado === 'cerrada' || alert.estado === 'falsa_alarma') && (
+            <section className="alert-detail-section">
+              <button className="btn-view-report" onClick={() => setShowReport(true)}>
+                📄 Ver Reporte del Incidente
+              </button>
+            </section>
+          )}
 
           {/* Cambio de estado */}
           <section className="alert-detail-section">

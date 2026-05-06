@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/api.ts","./src/main.tsx","./src/types.ts","./src/vite-env.d.ts","./src/components/alertdetail.tsx","./src/components/alertslist.tsx","./src/components/statushistory.tsx"],"version":"6.0.3"}
+{"root":["./src/app.tsx","./src/api.ts","./src/main.tsx","./src/types.ts","./src/vite-env.d.ts","./src/components/alertdetail.tsx","./src/components/alertslist.tsx","./src/components/reportviewer.tsx","./src/components/statushistory.tsx"],"version":"6.0.3"}

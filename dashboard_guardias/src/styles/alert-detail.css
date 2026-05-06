@@ -399,6 +399,23 @@
   cursor: not-allowed;
 }
 
+.btn-view-report {
+  width: 100%;
+  padding: 12px 20px;
+  background: #0d5c63;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-view-report:hover {
+  background: #0a4a4f;
+}
+
 /* Responsive */
 
 @media (max-width: 600px) {
