@@ -3,10 +3,27 @@ import { io, Socket } from 'socket.io-client';
 import './styles.css';
 import { clearToken, getAlerts, getProfile, getSummary, getToken, login, setToken, updateAlertStatus } from './api';
 import type { Alert, Summary, User } from './types';
+import { AlertsList } from './components/AlertsList';
+import { AlertDetail } from './components/AlertDetail';
 
-const states = ['pendiente', 'en_proceso', 'cerrada', 'falsa_alarma'];
-const priorities = ['falsa_alarma', 'baja', 'media', 'alta', 'urgente'];
 const SOCKET_URL = 'http://127.0.0.1:3000';
+
+// ─── Summary Card Component ───────────────────────────────────────────────────
+function SummaryCard({ title, value, accent }: { title: string; value: number; accent?: string }) {
+  const colors = {
+    red: '#f44336',
+    amber: '#ff9800',
+    green: '#4caf50',
+    slate: '#9e9e9e',
+  };
+
+  return (
+    <div className="summary-card" style={{ borderTopColor: colors[accent as keyof typeof colors] || '#0d5c63' }}>
+      <p className="summary-label">{title}</p>
+      <p className="summary-value">{value}</p>
+    </div>
+  );
+}
 
 // ─── Modal de Alerta Entrante ────────────────────────────────────────────────
 function IncomingAlertModal({ alert, onClose, onHandle }: {
@@ -102,6 +119,8 @@ export default function App() {
   const socketRef = useRef<Socket | null>(null);
   const [socketConnected, setSocketConnected] = useState(false);
   const [incomingAlert, setIncomingAlert] = useState<Alert | null>(null);
+  const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
+  const [view, setView] = useState<'list' | 'detail'>('list');
 
   async function loadDashboard() {
     setLoading(true);
@@ -192,6 +211,9 @@ export default function App() {
       setAlerts((prevAlerts) =>
         prevAlerts.map((a) => (a.id === updatedAlert.id ? updatedAlert : a))
       );
+      if (selectedAlert?.id === updatedAlert.id) {
+        setSelectedAlert(updatedAlert);
+      }
 
       // Recargar resumen
       void loadDashboard().catch(console.error);
@@ -214,7 +236,7 @@ export default function App() {
     return () => {
       socket.disconnect();
     };
-  }, [user]);
+  }, [user, selectedAlert?.id]);
 
   useEffect(() => {
     if (getToken()) {
@@ -260,7 +282,7 @@ export default function App() {
   async function handleStatusChange(alert: Alert, estado: string, observacion?: string) {
     const obs = observacion ?? window.prompt('Observación de seguimiento (opcional):', '') ?? '';
     const prioridad = window.prompt(
-      `Prioridad (${priorities.join(', ')})`,
+      'Prioridad (falsa_alarma, baja, media, alta, urgente)',
       alert.prioridad ?? 'media',
     ) ?? alert.prioridad;
     try {
@@ -281,21 +303,55 @@ export default function App() {
     }
   }
 
+  async function handleDetailStatusChange(alertId: number, newStatus: string, observacion: string) {
+    try {
+      await updateAlertStatus(alertId, newStatus, observacion);
+      await loadDashboard();
+      setSelectedAlert(null);
+      setView('list');
+    } catch (err) {
+      throw err;
+    }
+  }
+
+  async function handleSelectAlert(alert: Alert) {
+    setSelectedAlert(alert);
+    setView('detail');
+  }
+
+  async function handleQuickStatusChange(alertId: number, newStatus: string) {
+    try {
+      await updateAlertStatus(alertId, newStatus, `Cambio rápido a ${newStatus}`);
+      await loadDashboard();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error actualizando estado');
+    }
+  }
+
   if (!user) {
     return (
       <main className="login-shell">
         <section className="login-card">
           <p className="eyebrow">OnAlert</p>
           <h1>Dashboard de Guardias</h1>
-          <p className="muted">HU-06 y HU-07: recepción, seguimiento y perfil restringido para seguridad.</p>
+          <p className="muted">Sprint 3: Gestión Institucional y Reportes de Incidentes</p>
           <form onSubmit={handleLogin} className="login-form">
             <label>
               Email
-              <input value={email} onChange={(event) => setEmail(event.target.value)} />
+              <input
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                disabled={loading}
+              />
             </label>
             <label>
               Contraseña
-              <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
+              <input
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                disabled={loading}
+              />
             </label>
             {error ? <p className="error-text">{error}</p> : null}
             <button disabled={loading} type="submit">
@@ -322,10 +378,26 @@ export default function App() {
         />
       )}
 
+      {/* Modal detalle de incidente */}
+      {view === 'detail' && selectedAlert && (
+        <AlertDetail
+          alert={selectedAlert}
+          currentUser={user}
+          onClose={() => {
+            setSelectedAlert(null);
+            setView('list');
+          }}
+          onStatusChange={handleDetailStatusChange}
+          loading={loading}
+        />
+      )}
+
       <header className="topbar">
         <div>
           <p className="eyebrow">OnAlert Seguridad</p>
-          <h1>Centro de alertas</h1>
+          <h1>
+            {view === 'list' ? 'Centro de alertas' : `Detalles del incidente #${selectedAlert?.id}`}
+          </h1>
         </div>
         <div className="topbar-actions">
           <div className="guard-card">
@@ -354,99 +426,41 @@ export default function App() {
 
       {error ? <p className="error-banner">{error}</p> : null}
 
-      <section className="summary-grid">
-        <SummaryCard title="Total" value={summary?.total ?? 0} />
-        <SummaryCard title="Pendientes" value={summary?.pendientes ?? 0} accent="red" />
-        <SummaryCard title="En proceso" value={summary?.en_proceso ?? 0} accent="amber" />
-        <SummaryCard title="Urgentes" value={summary?.urgentes ?? 0} accent="red" />
-        <SummaryCard title="Cerradas" value={summary?.cerradas ?? 0} accent="green" />
-        <SummaryCard title="Falsas alarmas" value={summary?.falsas_alarmas ?? 0} accent="slate" />
-      </section>
+      {view === 'list' && (
+        <>
+          <section className="summary-grid">
+            <SummaryCard title="Total" value={summary?.total ?? 0} />
+            <SummaryCard title="Pendientes" value={summary?.pendientes ?? 0} accent="red" />
+            <SummaryCard title="En proceso" value={summary?.en_proceso ?? 0} accent="amber" />
+            <SummaryCard title="Urgentes" value={summary?.urgentes ?? 0} accent="red" />
+            <SummaryCard title="Cerradas" value={summary?.cerradas ?? 0} accent="green" />
+            <SummaryCard title="Falsas alarmas" value={summary?.falsas_alarmas ?? 0} accent="slate" />
+          </section>
 
-      <section className="panel">
-        <div className="panel-header">
-          <div>
-            <p className="eyebrow">Recepción integral</p>
-            <h2>Alertas activas e históricas (tiempo real)</h2>
-          </div>
-          <button className="secondary-button" onClick={() => void loadDashboard()}>
-            Refrescar
-          </button>
-        </div>
-
-        <div className="alerts-table">
-          <div className="alerts-head">
-            <span>Alumno</span>
-            <span>Ubicación</span>
-            <span>Descripción</span>
-            <span>Estado</span>
-            <span>Prioridad</span>
-            <span>Acción</span>
-          </div>
-          {alerts.length === 0 ? (
-            <div className="empty-state">No hay alertas registradas todavía.</div>
-          ) : (
-            alerts.map((alert) => (
-              <div key={alert.id} className="alerts-row">
-                <div>
-                  <strong>{alert.usuario}</strong>
-                  <small>{alert.email}</small>
-                </div>
-                <div>
-                  <strong>{alert.latitude.toFixed(5)}, {alert.longitude.toFixed(5)}</strong>
-                  <small>{new Date(alert.createdAt).toLocaleString()}</small>
-                  <small>
-                    <a
-                      href={`https://www.openstreetmap.org/?mlat=${alert.latitude}&mlon=${alert.longitude}#map=18/${alert.latitude}/${alert.longitude}`}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Ver en mapa
-                    </a>
-                  </small>
-                </div>
-                <div>
-                  <strong>{alert.descripcion || 'Sin descripción'}</strong>
-                  <small>{alert.observacion || 'Sin observación'}</small>
-                </div>
-                <div>
-                  <span className={`status-pill status-${alert.estado}`}>{alert.estado}</span>
-                </div>
-                <div>
-                  <strong>{alert.prioridad}</strong>
-                </div>
-                <div>
-                  <select
-                    value={alert.estado}
-                    onChange={(event) => void handleStatusChange(alert, event.target.value)}
-                  >
-                    {states.map((state) => (
-                      <option key={state} value={state}>
-                        {state}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+          <section className="panel">
+            <div className="panel-header">
+              <div>
+                <p className="eyebrow">HU-08: Gestión Institucional</p>
+                <h2>Gestión de Incidentes y Reportes (Sprint 3)</h2>
               </div>
-            ))
-          )}
-        </div>
-      </section>
+              <button
+                className="secondary-button"
+                onClick={() => void loadDashboard()}
+                disabled={loading}
+              >
+                {loading ? 'Cargando...' : 'Refrescar'}
+              </button>
+            </div>
+
+            <AlertsList
+              alerts={alerts}
+              onSelectAlert={handleSelectAlert}
+              onStatusChange={handleQuickStatusChange}
+              loading={loading}
+            />
+          </section>
+        </>
+      )}
     </main>
-  );
-}
-
-type SummaryCardProps = {
-  title: string;
-  value: number;
-  accent?: 'red' | 'amber' | 'green' | 'slate';
-};
-
-function SummaryCard({ title, value, accent }: SummaryCardProps) {
-  return (
-    <article className={`summary-card ${accent ?? ''}`.trim()}>
-      <span>{title}</span>
-      <strong>{value}</strong>
-    </article>
   );
 }

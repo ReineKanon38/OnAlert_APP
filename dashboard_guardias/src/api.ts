@@ -75,3 +75,25 @@ export async function updateAlertStatus(
   }
   return data.alerta;
 }
+
+export async function getAlertLogs(alertId: number) {
+  const response = await fetch(`${API_BASE}/alerts/${alertId}/status-logs`, {
+    headers: authHeaders(),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error ?? 'No se pudo cargar el historial de cambios');
+  }
+  return data.logs || [];
+}
+
+export async function generateIncidentReport(alertId: number): Promise<string> {
+  const response = await fetch(`${API_BASE}/alerts/${alertId}/report`, {
+    headers: authHeaders(),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error ?? 'No se pudo generar el reporte');
+  }
+  return data.report;
+}

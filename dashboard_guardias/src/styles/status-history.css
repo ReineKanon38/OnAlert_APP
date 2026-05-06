@@ -1,0 +1,143 @@
+/* Status History Styles */
+
+.status-history {
+  background: white;
+  padding: 15px;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+}
+
+.status-history h3 {
+  margin: 0 0 15px;
+  color: #333;
+  font-size: 16px;
+}
+
+.status-history-loading,
+.status-history-empty,
+.status-history-error {
+  padding: 20px;
+  text-align: center;
+  color: #666;
+  font-size: 14px;
+  background: #f9f9f9;
+  border-radius: 6px;
+  border: 1px dashed #ddd;
+}
+
+.status-history-error {
+  color: #d32f2f;
+  background: #ffebee;
+}
+
+.status-history-timeline {
+  position: relative;
+  padding-left: 30px;
+}
+
+.status-history-timeline::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(180deg, #0d5c63 0%, #e0e0e0 100%);
+}
+
+.status-history-item {
+  position: relative;
+  margin-bottom: 20px;
+  display: flex;
+  gap: 15px;
+  align-items: flex-start;
+}
+
+.status-history-item:last-child {
+  margin-bottom: 0;
+}
+
+.status-history-marker {
+  position: absolute;
+  left: -22px;
+  top: 4px;
+  width: 18px;
+  height: 18px;
+  background: #0d5c63;
+  border: 3px solid white;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px #0d5c63;
+}
+
+.status-history-content {
+  flex: 1;
+  background: #f9f9f9;
+  padding: 12px;
+  border-radius: 6px;
+  border: 1px solid #e0e0e0;
+}
+
+.status-history-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.status-history-time {
+  font-size: 12px;
+  color: #666;
+  font-weight: 600;
+}
+
+.status-history-by {
+  font-size: 12px;
+  color: #0d5c63;
+  font-weight: 600;
+}
+
+.status-history-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.status-old {
+  padding: 4px 8px;
+  background: #fff3e0;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #e65100;
+  font-weight: 600;
+}
+
+.status-arrow {
+  color: #999;
+  font-weight: bold;
+}
+
+.status-new {
+  padding: 4px 8px;
+  background: #e8f5e9;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #2e7d32;
+  font-weight: 600;
+}
+
+.status-history-observation {
+  font-size: 13px;
+  color: #333;
+  background: white;
+  padding: 8px;
+  border-radius: 4px;
+  border-left: 3px solid #0d5c63;
+}
+
+.status-history-observation strong {
+  display: block;
+  color: #0d5c63;
+  margin-bottom: 4px;
+}

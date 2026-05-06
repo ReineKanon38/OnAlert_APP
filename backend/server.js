@@ -603,6 +603,243 @@ app.get('/alerts/:id/logs', async (req, res) => {
   }
 });
 
+// Alias para compatibilidad con dashboard
+app.get('/alerts/:id/status-logs', async (req, res) => {
+  try {
+    const auth = await getAuthUser(req);
+    if (!auth.user) {
+      return res.status(auth.status).json({ error: auth.error });
+    }
+
+    if (!requireRole(auth.user, securityRoles)) {
+      return res.status(403).json({ error: 'Acceso restringido para seguridad/administración' });
+    }
+
+    const logs = await pool.query(
+      `SELECT
+         l.id,
+         l.alert_id AS "alertId",
+         l.changed_by AS "changedBy",
+         u.nombre AS "changedByName",
+         l.previous_status AS "previousStatus",
+         l.new_status AS "newStatus",
+         l.observacion,
+         l.changed_at AS "changedAt"
+       FROM alert_status_logs l
+       LEFT JOIN users u ON u.id = l.changed_by
+       WHERE l.alert_id = $1
+       ORDER BY l.changed_at DESC`,
+      [req.params.id],
+    );
+
+    return res.json({ success: true, total: logs.rows.length, logs: logs.rows });
+  } catch (error) {
+    return res.status(500).json({ error: `Error consultando historial: ${error.message}` });
+  }
+});
+
+// Endpoint para generar reporte de incidente
+app.get('/alerts/:id/report', async (req, res) => {
+  try {
+    const auth = await getAuthUser(req);
+    if (!auth.user) {
+      return res.status(auth.status).json({ error: auth.error });
+    }
+
+    if (!requireRole(auth.user, securityRoles)) {
+      return res.status(403).json({ error: 'Acceso restringido para seguridad/administración' });
+    }
+
+    // Obtener datos de la alerta
+    const alertQuery = await pool.query(
+      `SELECT a.*, u.nombre, u.email, u.role
+       FROM alerts a
+       JOIN users u ON a.user_id = u.id
+       WHERE a.id = $1`,
+      [req.params.id],
+    );
+
+    if (alertQuery.rows.length === 0) {
+      return res.status(404).json({ error: 'Alerta no encontrada' });
+    }
+
+    const alert = alertQuery.rows[0];
+
+    // Obtener historial de cambios
+    const logsQuery = await pool.query(
+      `SELECT l.*, u.nombre AS changed_by_name
+       FROM alert_status_logs l
+       LEFT JOIN users u ON u.id = l.changed_by
+       WHERE l.alert_id = $1
+       ORDER BY l.changed_at ASC`,
+      [req.params.id],
+    );
+
+    const estadoLabel = {
+      cerrada: 'Resuelta ✅',
+      falsa_alarma: 'Falsa Alarma ⚠️',
+      pendiente: 'Pendiente ⏳',
+      en_proceso: 'En Proceso 🔄',
+    }[alert.estado] || alert.estado;
+
+    const mapsLink = alert.latitude && alert.longitude
+      ? `https://www.openstreetmap.org/?mlat=${alert.latitude}&mlon=${alert.longitude}&zoom=17`
+      : 'No disponible';
+
+    // Generar HTML del reporte
+    const reportHTML = `
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Reporte de Incidente #${alert.id}</title>
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; color: #333; background: #f5f5f5; }
+        .container { max-width: 800px; margin: 20px auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        header { background: linear-gradient(135deg, #0d5c63 0%, #06b6d4 100%); color: white; padding: 20px; border-radius: 6px; margin-bottom: 30px; }
+        header h1 { margin-bottom: 5px; }
+        header p { font-size: 14px; opacity: 0.9; }
+        section { margin-bottom: 25px; }
+        h2 { color: #0d5c63; font-size: 18px; border-bottom: 2px solid #0d5c63; padding-bottom: 10px; margin-bottom: 15px; }
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .info-item { background: #f9f9f9; padding: 12px; border-radius: 4px; border-left: 3px solid #0d5c63; }
+        .info-label { color: #666; font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+        .info-value { color: #333; font-size: 14px; font-weight: 600; }
+        .user-info { display: flex; gap: 15px; align-items: flex-start; margin-bottom: 15px; }
+        .user-avatar { width: 80px; height: 80px; border-radius: 6px; background: linear-gradient(135deg, #0d5c63 0%, #06b6d4 100%); color: white; display: flex; align-items: center; justify-content: center; font-size: 32px; }
+        .description { background: #f0f0f0; padding: 15px; border-radius: 4px; border-left: 4px solid #ff9800; }
+        .timeline { position: relative; padding-left: 30px; }
+        .timeline-item { position: relative; margin-bottom: 20px; }
+        .timeline-item::before { content: ''; position: absolute; left: -20px; top: 6px; width: 12px; height: 12px; background: #0d5c63; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 0 1px #0d5c63; }
+        .timeline-item-time { font-size: 12px; color: #666; font-weight: 600; }
+        .timeline-item-status { background: #e8f4f8; padding: 8px 12px; border-radius: 4px; font-size: 13px; margin-top: 4px; }
+        .timeline-item-obs { background: #f9f9f9; padding: 8px 12px; border-radius: 4px; font-size: 13px; margin-top: 4px; color: #555; }
+        .footer { border-top: 1px solid #e0e0e0; padding-top: 15px; margin-top: 30px; font-size: 12px; color: #999; text-align: center; }
+        @media print { body { background: white; } .container { box-shadow: none; } }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <header>
+          <h1>🚨 Reporte de Incidente OnAlert</h1>
+          <p>ID: #${alert.id} | Estado: ${estadoLabel}</p>
+        </header>
+
+        <section>
+          <h2>Información del Remitente</h2>
+          <div class="user-info">
+            <div class="user-avatar">${alert.nombre.charAt(0).toUpperCase()}</div>
+            <div>
+              <div class="info-item">
+                <div class="info-label">Nombre</div>
+                <div class="info-value">${alert.nombre}</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">Correo</div>
+                <div class="info-value">${alert.email}</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">Rol</div>
+                <div class="info-value">${alert.role === 'student' ? 'Alumno' : alert.role === 'professor' ? 'Profesor' : 'Otro'}</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <h2>Detalles del Incidente</h2>
+          <div class="info-grid">
+            <div class="info-item">
+              <div class="info-label">Fecha de Reporte</div>
+              <div class="info-value">${new Date(alert.created_at).toLocaleString('es-MX')}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Estado Actual</div>
+              <div class="info-value">${estadoLabel}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Prioridad</div>
+              <div class="info-value">${alert.prioridad.toUpperCase()}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Última Actualización</div>
+              <div class="info-value">${new Date(alert.updated_at).toLocaleString('es-MX')}</div>
+            </div>
+          </div>
+
+          <div style="margin-top: 15px;">
+            <div class="description">
+              <strong>Descripción:</strong><br>
+              ${alert.descripcion || 'Sin descripción proporcionada'}
+            </div>
+          </div>
+
+          ${alert.observacion ? `
+            <div style="margin-top: 15px;">
+              <div class="description" style="border-left-color: #4caf50;">
+                <strong>Observación Final:</strong><br>
+                ${alert.observacion}
+              </div>
+            </div>
+          ` : ''}
+        </section>
+
+        <section>
+          <h2>Ubicación del Incidente</h2>
+          <div class="info-item">
+            <div class="info-label">Coordenadas</div>
+            <div class="info-value">${alert.latitude.toFixed(6)}, ${alert.longitude.toFixed(6)}</div>
+          </div>
+          <div class="info-item" style="margin-top: 10px;">
+            <div class="info-label">Mapa</div>
+            <div class="info-value"><a href="${mapsLink}" target="_blank" rel="noreferrer">Ver en OpenStreetMap ↗</a></div>
+          </div>
+        </section>
+
+        <section>
+          <h2>Historial de Cambios</h2>
+          <div class="timeline">
+            ${logsQuery.rows.map(log => `
+              <div class="timeline-item">
+                <div class="timeline-item-time">${new Date(log.changed_at).toLocaleString('es-MX')}</div>
+                ${log.changed_by_name ? `<div class="timeline-item-time">Por: ${log.changed_by_name}</div>` : ''}
+                <div class="timeline-item-status">
+                  ${log.previous_status ? `${log.previous_status} → ` : ''}${log.new_status}
+                </div>
+                ${log.observacion ? `<div class="timeline-item-obs">${log.observacion}</div>` : ''}
+              </div>
+            `).join('')}
+          </div>
+        </section>
+
+        <div class="footer">
+          <p>Reporte generado automáticamente por OnAlert Sistema de Vigilancia</p>
+          <p>${new Date().toLocaleString('es-MX')}</p>
+        </div>
+      </div>
+    </body>
+    </html>
+    `;
+
+    return res.json({ 
+      success: true, 
+      report: reportHTML,
+      metadata: {
+        alertId: alert.id,
+        estado: alert.estado,
+        usuario: alert.nombre,
+        email: alert.email,
+        createdAt: alert.created_at,
+        updatedAt: alert.updated_at,
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ error: `Error generando reporte: ${error.message}` });
+  }
+});
+
 app.get('/dashboard/summary', async (req, res) => {
   try {
     const auth = await getAuthUser(req);
