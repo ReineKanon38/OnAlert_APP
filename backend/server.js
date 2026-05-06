@@ -9,68 +9,19 @@ const swaggerUi = require('swagger-ui-express');
 const openApiSpec = require('./openapi.json');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
-const nodemailer = require('nodemailer');
+const emailService = require('./services/emailService');
 
 dns.setDefaultResultOrder('ipv4first');
 dotenv.config();
 
-// ─── Nodemailer: Servicio de correo ─────────────────────────────────────────
-const emailTransporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: parseInt(process.env.SMTP_PORT || '587'),
-  secure: false,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
-
-const COORD_EMAILS = (process.env.COORD_EMAILS || '').split(',').map(e => e.trim()).filter(Boolean);
-
-async function sendIncidentReport({ alert, guardName, coordEmails }) {
-  if (!coordEmails.length || !process.env.SMTP_USER) return;
-
-  const estadoLabel = {
-    cerrada: 'Resuelta ✅',
-    falsa_alarma: 'Falsa Alarma ⚠️',
-  }[alert.estado] || alert.estado;
-
-  const mapsLink = alert.latitude && alert.longitude
-    ? `https://www.openstreetmap.org/?mlat=${alert.latitude}&mlon=${alert.longitude}&zoom=17`
-    : 'No disponible';
-
-  const html = `
-    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#1a2a36">
-      <div style="background:#0d5c63;padding:20px 28px;border-radius:12px 12px 0 0">
-        <h1 style="margin:0;color:#fff;font-size:20px">🔔 Reporte de Incidente — OnAlert</h1>
-      </div>
-      <div style="background:#f7f9fb;padding:28px;border-radius:0 0 12px 12px;border:1px solid #e1e8ef">
-        <p style="margin:0 0 18px">Se ha cerrado un incidente de seguridad en el sistema OnAlert.</p>
-        <table style="width:100%;border-collapse:collapse;font-size:14px">
-          <tr><td style="padding:8px 0;color:#5a6a77;width:160px">Estado final</td><td style="font-weight:700">${estadoLabel}</td></tr>
-          <tr><td style="padding:8px 0;color:#5a6a77">ID Alerta</td><td>#${alert.id}</td></tr>
-          <tr><td style="padding:8px 0;color:#5a6a77">Alumno/Usuario</td><td>${alert.usuario} (${alert.email})</td></tr>
-          <tr><td style="padding:8px 0;color:#5a6a77">Fecha y hora</td><td>${new Date(alert.createdAt).toLocaleString('es-MX')}</td></tr>
-          <tr><td style="padding:8px 0;color:#5a6a77">Atendido por</td><td>${guardName}</td></tr>
-          <tr><td style="padding:8px 0;color:#5a6a77">Descripción</td><td>${alert.descripcion || 'Sin descripción'}</td></tr>
-          <tr><td style="padding:8px 0;color:#5a6a77">Observación</td><td>${alert.observacion || 'Ninguna'}</td></tr>
-          <tr><td style="padding:8px 0;color:#5a6a77">Ubicación</td><td><a href="${mapsLink}" style="color:#0d5c63">Ver en mapa ↗</a></td></tr>
-        </table>
-        <p style="margin:24px 0 0;font-size:12px;color:#8a9aaa">Este correo fue generado automáticamente por el sistema OnAlert de TESCH. No responder.</p>
-      </div>
-    </div>
-  `;
-
-  await emailTransporter.sendMail({
-    from: `"OnAlert Sistema" <${process.env.SMTP_USER}>`,
-    to: coordEmails.join(', '),
-    subject: `[OnAlert] Incidente ${estadoLabel} — ${alert.usuario}`,
-    html,
-  });
-
-  console.log(`[Email] Reporte enviado a: ${coordEmails.join(', ')}`);
+// Función wrapper para enviar reportes usando el nuevo servicio
+async function sendIncidentReport({ alert, guardName }) {
+  try {
+    await emailService.sendIncidentReport({ alert, guardName });
+  } catch (error) {
+    console.error('[Email] Error al enviar reporte:', error.message);
+  }
 }
-// ─────────────────────────────────────────────────────────────────────────────
 
 const app = express();
 app.use(cors());
@@ -556,7 +507,6 @@ app.patch('/alerts/:id/status', async (req, res) => {
               email: ownerData.email || '',
             },
             guardName: auth.user.nombre,
-            coordEmails: COORD_EMAILS,
           }).catch(err => console.error('[Email] Error enviando reporte:', err.message));
         } catch (err) {
           console.error('[Email] Error preparando reporte:', err.message);
