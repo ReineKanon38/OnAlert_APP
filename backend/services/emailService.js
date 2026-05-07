@@ -19,6 +19,7 @@ function initializeTransporter() {
     host: process.env.SMTP_HOST || 'smtp.gmail.com',
     port: parseInt(process.env.SMTP_PORT || '587'),
     secure: process.env.SMTP_SECURE === 'true', // false para TLS, true para SSL
+    family: 4, // forzar IPv4 (Render free tier no soporta IPv6 outbound)
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
