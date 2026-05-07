@@ -678,27 +678,27 @@ app.patch('/alerts/:id/status', async (req, res) => {
           updatedAt: row.updated_at,
         };
         io.emit('alert-updated', alertForSocket);
-      }
 
-      // Enviar reporte por email al cerrar el incidente
-      if (['cerrada', 'falsa_alarma'].includes(estado)) {
-        try {
-          // Obtener datos completos del usuario que generó la alerta
-          const alertOwner = await pool.query(
-            'SELECT nombre, email FROM users WHERE id = $1',
-            [updatedAlert.userId],
-          );
-          const ownerData = alertOwner.rows[0] || {};
+        // Enviar reporte por email al cerrar el incidente (usando datos ya obtenidos del JOIN)
+        if (['cerrada', 'falsa_alarma'].includes(estado)) {
           sendIncidentReport({
             alert: {
-              ...updatedAlert,
-              usuario: ownerData.nombre || 'Desconocido',
-              email: ownerData.email || '',
+              id: row.id,
+              usuario: row.nombre,
+              email: row.email,
+              latitude: row.latitude,
+              longitude: row.longitude,
+              descripcion: row.descripcion,
+              estado: row.estado,
+              prioridad: row.prioridad || 'media',
+              observacion: row.observacion,
+              createdAt: row.created_at,
             },
             guardName: auth.user.nombre,
+          }).then(result => {
+            if (result.success) console.log(`[Email] Reporte enviado para alerta #${row.id}`);
+            else console.warn(`[Email] No se pudo enviar reporte para alerta #${row.id}:`, result.reason || result.error);
           }).catch(err => console.error('[Email] Error enviando reporte:', err.message));
-        } catch (err) {
-          console.error('[Email] Error preparando reporte:', err.message);
         }
       }
 
