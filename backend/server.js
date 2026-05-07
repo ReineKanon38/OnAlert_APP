@@ -44,6 +44,32 @@ const alertCooldownSeconds = Number(process.env.ALERT_COOLDOWN_SECONDS || 30);
 const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY || '';
 const SUPABASE_BUCKET = process.env.SUPABASE_STORAGE_BUCKET || 'profile-photos';
+const FCM_SERVER_KEY = process.env.FCM_SERVER_KEY || '';
+
+// Envía push notification via FCM HTTP v1 (legacy HTTP API)
+const sendPushToTokens = async (tokens, title, body, data = {}) => {
+  if (!FCM_SERVER_KEY || tokens.length === 0) return;
+  const payload = {
+    registration_ids: tokens,
+    notification: { title, body, sound: 'default' },
+    data,
+    priority: 'high',
+  };
+  try {
+    const res = await fetch('https://fcm.googleapis.com/fcm/send', {
+      method: 'POST',
+      headers: {
+        'Authorization': `key=${FCM_SERVER_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    const result = await res.json();
+    console.log('[FCM] Push enviado:', result.success, 'fallo:', result.failure);
+  } catch (e) {
+    console.warn('[FCM] Error enviando push:', e.message);
+  }
+};
 
 const uploadProfilePhoto = async (userId, base64DataUrl) => {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
@@ -204,6 +230,7 @@ const initSchema = async () => {
   await pool.query(`ALTER TABLE alerts ADD COLUMN IF NOT EXISTS prioridad TEXT NOT NULL DEFAULT 'media';`);
   await pool.query(`ALTER TABLE alerts ADD COLUMN IF NOT EXISTS idempotency_key TEXT;`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS alerts_idempotency_key_idx ON alerts (idempotency_key) WHERE idempotency_key IS NOT NULL;`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS fcm_token TEXT;`);
 
   const seedEmail = process.env.SECURITY_SEED_EMAIL || 'guardia@onalert.local';
   const seedPassword = process.env.SECURITY_SEED_PASSWORD || 'Guardia123#';
@@ -324,6 +351,24 @@ app.get('/auth/me', async (req, res) => {
     return res.json({ usuario: auth.user });
   } catch (error) {
     return res.status(500).json({ error: `Error consultando perfil: ${error.message}` });
+  }
+});
+
+// Registrar o actualizar token FCM del dispositivo
+app.post('/auth/fcm-token', async (req, res) => {
+  try {
+    const auth = await getAuthUser(req);
+    if (!auth.user) {
+      return res.status(auth.status).json({ error: auth.error });
+    }
+    const { token } = req.body;
+    if (!token || typeof token !== 'string') {
+      return res.status(400).json({ error: 'Token FCM requerido' });
+    }
+    await pool.query('UPDATE users SET fcm_token = $1 WHERE id = $2', [token, auth.user.id]);
+    return res.json({ success: true });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
   }
 });
 
@@ -479,6 +524,24 @@ app.post('/alerts', async (req, res) => {
       
       io.emit('new-alert', alertWithUser);
       console.log(`[Alert] Nueva alerta ${alert.id} transmitida a ${guardConnections.size} guardias`);
+
+      // Push notification a todos los guardias/admins con token FCM
+      try {
+        const tokenRows = await pool.query(
+          `SELECT fcm_token FROM users WHERE role IN ('security', 'admin') AND fcm_token IS NOT NULL AND vigente = TRUE`
+        );
+        const tokens = tokenRows.rows.map(r => r.fcm_token);
+        if (tokens.length > 0) {
+          await sendPushToTokens(
+            tokens,
+            '🚨 Nueva alerta',
+            `${fullAlert.nombre}: ${fullAlert.descripcion || 'Alerta de emergencia'}`,
+            { alertId: String(alert.id) },
+          );
+        }
+      } catch (pushErr) {
+        console.warn('[FCM] No se pudo enviar push:', pushErr.message);
+      }
     }
 
     return res.json({ success: true, alerta: alert });
