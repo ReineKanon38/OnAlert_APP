@@ -1021,6 +1021,16 @@ io.on('connection', (socket) => {
   });
 });
 
+// Keep-alive: evita que Render (free tier) duerma el servicio
+const SELF_URL = (process.env.RENDER_EXTERNAL_URL || '').replace(/\/$/, '');
+if (SELF_URL) {
+  setInterval(() => {
+    fetch(`${SELF_URL}/health`)
+      .then(() => console.log('[keep-alive] ping ok'))
+      .catch((e) => console.warn('[keep-alive] ping failed:', e.message));
+  }, 10 * 60 * 1000); // cada 10 minutos
+}
+
 initSchema()
   .then(() => {
     httpServer.listen(PORT, () => {
