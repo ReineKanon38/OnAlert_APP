@@ -10,6 +10,7 @@ const openApiSpec = require('./openapi.json');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
 const emailService = require('./services/emailService');
+const admin = require('firebase-admin');
 
 dns.setDefaultResultOrder('ipv4first');
 dotenv.config();
@@ -44,28 +45,35 @@ const alertCooldownSeconds = Number(process.env.ALERT_COOLDOWN_SECONDS || 30);
 const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY || '';
 const SUPABASE_BUCKET = process.env.SUPABASE_STORAGE_BUCKET || 'profile-photos';
-const FCM_SERVER_KEY = process.env.FCM_SERVER_KEY || '';
+const FCM_SERVICE_ACCOUNT = process.env.FIREBASE_SERVICE_ACCOUNT_JSON || '';
 
-// Envía push notification via FCM HTTP v1 (legacy HTTP API)
-const sendPushToTokens = async (tokens, title, body, data = {}) => {
-  if (!FCM_SERVER_KEY || tokens.length === 0) return;
-  const payload = {
-    registration_ids: tokens,
-    notification: { title, body, sound: 'default' },
-    data,
-    priority: 'high',
-  };
+// Inicializar Firebase Admin SDK con la service account
+let firebaseInitialized = false;
+if (FCM_SERVICE_ACCOUNT) {
   try {
-    const res = await fetch('https://fcm.googleapis.com/fcm/send', {
-      method: 'POST',
-      headers: {
-        'Authorization': `key=${FCM_SERVER_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
+    const serviceAccount = JSON.parse(FCM_SERVICE_ACCOUNT);
+    admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+    firebaseInitialized = true;
+    console.log('[FCM] Firebase Admin SDK inicializado');
+  } catch (e) {
+    console.warn('[FCM] Error inicializando Firebase Admin:', e.message);
+  }
+}
+
+// Envía push notification a múltiples tokens via FCM v1
+const sendPushToTokens = async (tokens, title, body, data = {}) => {
+  if (!firebaseInitialized || tokens.length === 0) return;
+  try {
+    const stringData = Object.fromEntries(
+      Object.entries(data).map(([k, v]) => [k, String(v)])
+    );
+    const response = await admin.messaging().sendEachForMulticast({
+      tokens,
+      notification: { title, body },
+      data: stringData,
+      android: { priority: 'high' },
     });
-    const result = await res.json();
-    console.log('[FCM] Push enviado:', result.success, 'fallo:', result.failure);
+    console.log(`[FCM] Push enviado: ${response.successCount} ok, ${response.failureCount} fallo`);
   } catch (e) {
     console.warn('[FCM] Error enviando push:', e.message);
   }
