@@ -1,10 +1,12 @@
 # CONTRIBUTING - OnAlert
 
-Esta guia define un flujo de trabajo simple para avanzar rapido sin romper `main`.
+Esta guia define el flujo de trabajo para el monorepo OnAlert (Flutter + Node.js + React).
+
+> **Stack:** Flutter 3.x · Node.js 18+ · React + Vite + TypeScript · PostgreSQL (Supabase) · Socket.IO · Firebase FCM
 
 ## 1) Ramas base
 
-- `main`: estado productivo.
+- `main`: estado productivo — auto-despliega en Render y Vercel.
 - `develop`: rama de trabajo diario.
 - `release/*`: preparacion de version.
 - `hotfix/*`: correccion urgente en produccion.
@@ -91,13 +93,37 @@ Ejemplos:
 
 Los PR deben usar el template del repositorio y completar la seccion del modulo afectado.
 
-- Movil (`app_movil`): build local, smoke test de login y navegacion basica, evidencia visual.
-- Backend (`backend`): pruebas locales o script de verificacion, endpoints criticos validados.
-- Dashboard (`dashboard_guardias`): build exitoso, validacion de vistas afectadas, evidencia visual.
+**App móvil (`app_movil`):**
+- `flutter analyze lib/` sin errores (warnings de `avoid_print` son aceptables)
+- Build APK exitoso: `flutter build apk --release --target-platform android-arm64 --dart-define=API_BASE_URL=https://onalert-api.onrender.com`
+- Smoke test: login con `rotsen_lh1@tesch.edu.mx` / `Rotsen123#` y envío de alerta
+- Smoke test guardia: login con `guardia@onalert.local` / `Guardia123#` y recepción de alerta
+- Evidencia visual (captura o video)
+
+**Backend (`backend`):**
+- `node --check server.js` sin errores
+- Health check local: `curl http://localhost:3000/health`
+- Probar endpoint afectado con Swagger: `http://localhost:3000/docs`
+- Confirmar que `initSchema` no rompe la BD existente
+
+**Dashboard (`dashboard_guardias`):**
+- `npm run build` exitoso (TypeScript sin errores)
+- Login con `guardia@onalert.local` / `Guardia123#`
+- Verificar indicador de conexión WebSocket en verde
+- Evidencia visual
 
 Ver template: `.github/PULL_REQUEST_TEMPLATE.md`.
 
-## 10) Versionado y tags
+## 10) Variables de entorno al hacer PR
+
+Nunca commitear `.env`. Usar `.env.example` para documentar nuevas variables.
+
+Si agregas una variable nueva:
+1. Añadirla a `backend/.env.example` con descripción.
+2. Mencionarla explícitamente en el PR.
+3. Agregarla manualmente en el dashboard de Render (Environment).
+
+## 11) Versionado y tags
 
 Se usa SemVer con prefijo `v`:
 

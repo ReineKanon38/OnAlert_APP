@@ -2,6 +2,9 @@
 
 Guia practica para usar el flujo Git/GitHub implementado en este repositorio.
 
+> **Deploys automaticos:** push a `main` → Render redespliega el backend + Vercel redespliega el dashboard.  
+> **APK:** se genera manualmente y se distribuye al dispositivo del guardia.
+
 ## 1) Que ya esta configurado
 
 - Estrategia de ramas: `main`, `develop`, `release/*`, `hotfix/*`, `feature/*`, `fix/*`, `chore/*`.
@@ -11,11 +14,11 @@ Guia practica para usar el flujo Git/GitHub implementado en este repositorio.
 
 Archivos clave:
 
-- `CONTRIBUTING.md`
-- `RELEASE.md`
+- `README.md` — arquitectura completa, endpoints, setup, usuarios de prueba
+- `CONTRIBUTING.md` — convenciones de commits, ramas y checklists de PR
+- `RELEASE.md` — proceso de release y versionado
+- `backend/.env.example` — todas las variables de entorno necesarias
 - `.github/PULL_REQUEST_TEMPLATE.md`
-- `.github/ISSUE_TEMPLATE/bug_report.yml`
-- `.github/ISSUE_TEMPLATE/feature_request.yml`
 
 ## 2) Flujo diario recomendado (developer)
 
@@ -25,8 +28,6 @@ Archivos clave:
 4. Sube tu rama.
 5. Abre PR hacia `develop` y completa checklist.
 6. Corrige feedback y mergea.
-
-Comandos base:
 
 ```bash
 git checkout develop
@@ -39,65 +40,110 @@ git commit -m "feat(modulo): descripcion corta"
 git push -u origin feature/modulo-cambio
 ```
 
-## 3) Como abrir un issue correctamente
+## 3) Comandos frecuentes por modulo
+
+### Backend — verificar y correr local
+```bash
+cd backend
+cp .env.example .env   # completar con credenciales reales
+npm install
+node --check server.js  # verifica sintaxis
+node server.js          # corre en puerto 3000
+```
+
+Health check: `http://localhost:3000/health`  
+Swagger docs: `http://localhost:3000/docs`
+
+### Dashboard — dev local
+```bash
+cd dashboard_guardias
+npm install
+# .env.local con: VITE_API_URL=http://localhost:3000
+npm run dev
+# Login: guardia@onalert.local / Guardia123#
+```
+
+### App movil — build y prueba
+```bash
+cd app_movil
+flutter pub get
+flutter analyze lib/   # solo debe haber warnings, no errores
+
+# Correr en dispositivo fisico (recomendado para geolocation y FCM)
+flutter run --dart-define=API_BASE_URL=http://TU_IP_LOCAL:3000
+
+# Build APK produccion (arm64, ~17.8 MB)
+flutter build apk --release --target-platform android-arm64 \
+  --dart-define=API_BASE_URL=https://onalert-api.onrender.com
+# Salida: app_movil/build/app/outputs/flutter-apk/app-release.apk
+```
+
+## 4) Usuarios de prueba
+
+| Email | Contrasena | Rol | Donde se usa |
+|---|---|---|---|
+| `guardia@onalert.local` | `Guardia123#` | security | App movil (guardia) + Dashboard |
+| `rotsen_lh1@tesch.edu.mx` | `Rotsen123#` | student | App movil (alumno) |
+| `cesar_202214024@tesch.edu.mx` | `Cesar123#` | student | App movil (alumno) |
+
+## 5) Como abrir un issue correctamente
 
 ### Bug
-
-1. Ve a GitHub -> Issues -> New Issue.
-2. Elige `Bug report`.
-3. Completa modulo, pasos de reproduccion, evidencia e impacto.
-
-Resultado: el bug queda listo para priorizar y asignar sin pedir mas contexto.
+1. Ve a GitHub → Issues → New Issue → `Bug report`.
+2. Completa modulo, pasos de reproduccion, evidencia e impacto.
 
 ### Feature
+1. Ve a GitHub → Issues → New Issue → `Feature request`.
+2. Completa problema, propuesta y criterios de aceptacion.
 
-1. Ve a GitHub -> Issues -> New Issue.
-2. Elige `Feature request`.
-3. Completa problema, propuesta y criterios de aceptacion.
+## 6) Como usar el PR template
 
-Resultado: la feature queda lista para planning tecnico.
+Al abrir un PR, el template aparece automaticamente. Completar:
 
-## 4) Como usar el PR template
+- Resumen del cambio y tipo.
+- Modulos afectados y su checklist especifico.
+- Evidencia (captura, video, output de consola).
+- Riesgo y plan de rollback.
 
-Al abrir un PR, el template aparece automaticamente. Debes completar:
+**Regla:** no mergear PR con checklist incompleto.
 
-- Resumen de cambio.
-- Tipo de cambio.
-- Modulo(s) afectados.
-- Checklist general.
-- Checklist especifico por modulo.
-- Evidencia.
-- Riesgo y rollback.
-
-Regla operativa: no mergear PR con checklist incompleto.
-
-## 5) Flujos por tipo de trabajo
+## 7) Flujos por tipo de trabajo
 
 ### A) Feature normal
-
-Rama origen: `feature/*` desde `develop`.
-
-Rama destino PR: `develop`.
+Origen: `feature/*` desde `develop` → PR a `develop`.
 
 ### B) Fix no urgente
-
-Rama origen: `fix/*` desde `develop`.
-
-Rama destino PR: `develop`.
+Origen: `fix/*` desde `develop` → PR a `develop`.
 
 ### C) Release planificada
-
-1. Crea `release/<fecha>-vX.Y.Z` desde `develop`.
-2. Solo fixes de estabilizacion.
-3. PR a `main`.
-4. Tag en `main`.
-5. Merge de `main` a `develop`.
+```bash
+git checkout -b release/2026-05-07-v1.1.0 develop
+# solo fixes de estabilizacion
+git checkout main ; git merge release/...
+git tag v1.1.0
+git checkout develop ; git merge main
+git push --tags
+```
 
 ### D) Hotfix de produccion
+```bash
+git checkout -b hotfix/backend-crash main
+# fix minimo
+git checkout main ; git merge hotfix/...
+git tag v1.0.1
+git checkout develop ; git merge main
+git push --tags
+```
 
-1. Crea `hotfix/<modulo>-<incidente>` desde `main`.
-2. Aplica fix minimo y valida.
-3. PR a `main`.
+## 8) Variables de entorno en Render
+
+Cuando se agrega una nueva variable al backend:
+1. Actualizarla en `backend/.env.example`.
+2. Agregarla en Render → tu servicio → **Environment → Add Environment Variable**.
+3. Render reinicia automaticamente el servicio.
+
+Variables criticas ya configuradas en Render:
+`DATABASE_URL`, `JWT_SECRET`, `FIREBASE_SERVICE_ACCOUNT_JSON`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `SUPABASE_STORAGE_BUCKET`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `COORD_EMAILS`
 4. Tag patch (`vX.Y.Z+1`).
 5. Merge de `main` a `develop`.
 
