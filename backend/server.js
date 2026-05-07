@@ -679,27 +679,10 @@ app.patch('/alerts/:id/status', async (req, res) => {
         };
         io.emit('alert-updated', alertForSocket);
 
-        // Enviar reporte por email al cerrar el incidente (usando datos ya obtenidos del JOIN)
-        if (['cerrada', 'falsa_alarma'].includes(estado)) {
-          sendIncidentReport({
-            alert: {
-              id: row.id,
-              usuario: row.nombre,
-              email: row.email,
-              latitude: row.latitude,
-              longitude: row.longitude,
-              descripcion: row.descripcion,
-              estado: row.estado,
-              prioridad: row.prioridad || 'media',
-              observacion: row.observacion,
-              createdAt: row.created_at,
-            },
-            guardName: auth.user.nombre,
-          }).then(result => {
-            if (result.success) console.log(`[Email] Reporte enviado para alerta #${row.id}`);
-            else console.warn(`[Email] No se pudo enviar reporte para alerta #${row.id}:`, result.reason || result.error);
-          }).catch(err => console.error('[Email] Error enviando reporte:', err.message));
-        }
+        // Email deshabilitado temporalmente
+        // if (['cerrada', 'falsa_alarma'].includes(estado)) {
+        //   sendIncidentReport({ ... }).then(...).catch(...);
+        // }
       }
 
     return res.json({ success: true, alerta: updatedAlert });
