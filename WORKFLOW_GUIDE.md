@@ -252,3 +252,22 @@ Considera este setup cerrado cuando se cumpla todo:
 3. `main` y `develop` con branch protection activa.
 4. Required checks configurados con los 3 jobs.
 5. Equipo creando ramas desde `develop` y mergeando solo por PR.
+
+## 14) Guardrails de produccion para OnAlert
+
+Reglas operativas ya aplicadas en la app y backend:
+
+- Contrasenas: sin longitud maxima artificial; deben incluir al menos 1 mayuscula, 1 numero y 1 simbolo.
+- Boton de alerta: flujo de un solo toque. Al presionarlo inicia la cuenta atras y la alerta se envia automaticamente al terminar.
+- Cuenta atras: la preparacion de ubicacion corre en paralelo al conteo para reducir espera percibida.
+- Anti saturacion: el backend bloquea alertas nuevas si el usuario ya tiene una alerta activa (`pendiente` o `en_proceso`).
+- Cooldown: el backend impone una espera corta entre alertas consecutivas del mismo usuario. Valor actual recomendado: 30s.
+- Robustez cliente: si el servidor responde HTML o texto en un error, la app ya no debe mostrar el `<!DOCTYPE html>` crudo como si fuera JSON valido.
+
+Recomendacion de arquitectura para la siguiente etapa:
+
+1. Mantener el bloqueo principal en backend, no solo en UI.
+2. Agregar `idempotency key` por envio de alerta para deduplicar reintentos de red.
+3. Registrar metricas de rechazo por cooldown y alerta activa para ajustar la ventana sin adivinar.
+4. Mover fotos de perfil a storage dedicado y guardar solo URL en base de datos.
+5. Separar configuracion operativa por entorno con variables como `ALERT_COOLDOWN_SECONDS`.

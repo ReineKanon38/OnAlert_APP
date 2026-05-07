@@ -14,11 +14,8 @@ class AppConfig {
     defaultValue: false,
   );
 
-  // En QA permite cancelar alerta antes de enviarla.
-  // Para produccion se puede desactivar con:
-  // --dart-define=ALLOW_ALERT_CANCEL=false
-  static const allowAlertCancel = bool.fromEnvironment(
-    'ALLOW_ALERT_CANCEL',
-    defaultValue: true,
+  static const alertCountdownStepMs = int.fromEnvironment(
+    'ALERT_COUNTDOWN_STEP_MS',
+    defaultValue: 700,
   );
 }

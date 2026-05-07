@@ -29,6 +29,37 @@ class AuthService {
     return DateTime.tryParse(value) ?? DateTime.now();
   }
 
+  static Map<String, dynamic> _decodeJsonBody(http.Response response) {
+    final body = response.body.trim();
+    if (body.isEmpty) {
+      return {};
+    }
+
+    final decoded = jsonDecode(body);
+    if (decoded is Map<String, dynamic>) {
+      return decoded;
+    }
+
+    throw const FormatException('La respuesta del servidor no es un objeto JSON valido.');
+  }
+
+  static String _extractResponseError(http.Response response, String fallback) {
+    try {
+      final data = _decodeJsonBody(response);
+      final error = data['error']?.toString();
+      if (error != null && error.isNotEmpty) {
+        return error;
+      }
+    } catch (_) {
+      if (response.statusCode >= 500) {
+        return 'El servidor devolvio un error interno.';
+      }
+      return fallback;
+    }
+
+    return fallback;
+  }
+
   // Registro
   static Future<Map<String, dynamic>> register({
     required String email,
@@ -149,7 +180,7 @@ class AuthService {
         headers: await _authHeaders(),
       );
 
-      final data = jsonDecode(response.body);
+      final data = _decodeJsonBody(response);
       if (response.statusCode == 200) {
         return {'success': true, 'usuario': data['usuario']};
       }
@@ -157,6 +188,11 @@ class AuthService {
       return {
         'success': false,
         'error': data['error'] ?? 'No se pudo obtener el perfil',
+      };
+    } on FormatException {
+      return {
+        'success': false,
+        'error': 'Respuesta invalida del servidor al consultar el perfil.',
       };
     } catch (e) {
       return {'success': false, 'error': 'Error de conexión: $e'};
@@ -194,7 +230,7 @@ class AuthService {
         body: jsonEncode(payload),
       );
 
-      final data = jsonDecode(response.body);
+      final data = _decodeJsonBody(response);
       if (response.statusCode == 200) {
         return {'success': true, 'usuario': data['usuario']};
       }
@@ -202,6 +238,11 @@ class AuthService {
       return {
         'success': false,
         'error': data['error'] ?? 'No se pudo actualizar el perfil',
+      };
+    } on FormatException {
+      return {
+        'success': false,
+        'error': 'Respuesta invalida del servidor al actualizar el perfil.',
       };
     } catch (e) {
       return {'success': false, 'error': 'Error de conexión: $e'};
@@ -255,7 +296,7 @@ class AuthService {
         }),
       );
 
-      final data = jsonDecode(response.body);
+      final data = _decodeJsonBody(response);
       if (response.statusCode == 200) {
         final alerta = data['alerta'];
 
@@ -284,7 +325,12 @@ class AuthService {
 
       return {
         'success': false,
-        'error': data['error'] ?? 'Error al emitir alerta',
+        'error': data['error'] ?? _extractResponseError(response, 'Error al emitir alerta'),
+      };
+    } on FormatException {
+      return {
+        'success': false,
+        'error': 'Respuesta invalida del servidor al emitir la alerta.',
       };
     } catch (e) {
       return {'success': false, 'error': 'Error de conexión: $e'};

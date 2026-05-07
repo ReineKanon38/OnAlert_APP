@@ -1135,48 +1135,32 @@ class PanicButtonScreen extends StatefulWidget {
 class _PanicButtonScreenState extends State<PanicButtonScreen> {
   bool isSendingAlert = false;
 
-  Future<bool> _confirmSendAlertForTesting() async {
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Activar alerta'),
-          content: const Text(
-            'Estas en modo prueba. ¿Deseas enviar la alerta o cancelarla?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancelar'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Enviar'),
-            ),
-          ],
-        );
-      },
-    );
+  Future<Position> _prepareLocationForAlert() async {
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      throw Exception('Activa la ubicacion del dispositivo.');
+    }
 
-    return result ?? false;
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
+      throw Exception('Se requieren permisos de ubicacion.');
+    }
+
+    return Geolocator.getCurrentPosition(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+      ),
+    );
   }
 
   Future<void> _activateAlert() async {
     if (isSendingAlert) {
       return;
-    }
-
-    if (AppConfig.allowAlertCancel) {
-      final shouldSend = await _confirmSendAlertForTesting();
-      if (!shouldSend) {
-        if (!mounted) {
-          return;
-        }
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Alerta cancelada (modo prueba).')),
-        );
-        return;
-      }
     }
 
     if (!mounted) {
@@ -1188,6 +1172,7 @@ class _PanicButtonScreenState extends State<PanicButtonScreen> {
     });
 
     final countdownNotifier = ValueNotifier<int>(3);
+    final locationFuture = _prepareLocationForAlert();
 
     Navigator.push(
       context,
@@ -1200,37 +1185,16 @@ class _PanicButtonScreenState extends State<PanicButtonScreen> {
     try {
       for (var count = 3; count >= 1; count--) {
         countdownNotifier.value = count;
-        // Optimización: cuando llega a 1, espera menos para enviar más rápido
-        final delay = count == 1
-            ? const Duration(milliseconds: 500)
-            : const Duration(seconds: 1);
-        await Future.delayed(delay);
+        await Future.delayed(
+          Duration(milliseconds: AppConfig.alertCountdownStepMs),
+        );
       }
 
       if (!mounted) {
         return;
       }
 
-      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        throw Exception('Activa la ubicacion del dispositivo.');
-      }
-
-      var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
-        throw Exception('Se requieren permisos de ubicacion.');
-      }
-
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-        ),
-      );
+      final position = await locationFuture;
 
       final result = await AuthService.sendAlert(
         latitude: position.latitude,

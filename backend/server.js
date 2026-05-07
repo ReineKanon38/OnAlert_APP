@@ -40,6 +40,7 @@ const alertStates = ['pendiente', 'en_proceso', 'cerrada', 'falsa_alarma'];
 const alertPriorities = ['falsa_alarma', 'baja', 'media', 'alta', 'urgente'];
 const mobileRoles = ['student', 'professor'];
 const securityRoles = ['security', 'admin'];
+const alertCooldownSeconds = Number(process.env.ALERT_COOLDOWN_SECONDS || 30);
 
 const generateToken = (user) => {
   return jwt.sign(
@@ -71,8 +72,8 @@ const mapUser = (row) => ({
 const isInstitutionalEmail = (email) => /@tesch\.edu\.mx$/i.test(email);
 
 const isPasswordValid = (password) => {
-  // Max 10 caracteres con al menos 1 mayúscula, 1 número y 1 símbolo.
-  return /^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{1,10}$/.test(password);
+  // Requiere al menos 1 mayúscula, 1 número y 1 símbolo, sin tope artificial.
+  return /^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).+$/.test(password);
 };
 
 const getAuthUser = async (req) => {
@@ -203,7 +204,7 @@ app.post('/auth/register', async (req, res) => {
 
     if (!isPasswordValid(password)) {
       return res.status(400).json({
-        error: 'Contraseña inválida: máximo 10 caracteres, 1 mayúscula, 1 número y 1 símbolo',
+        error: 'Contraseña inválida: requiere al menos 1 mayúscula, 1 número y 1 símbolo',
       });
     }
 
@@ -299,7 +300,7 @@ app.put('/auth/me', async (req, res) => {
 
     if (password && !isPasswordValid(password)) {
       return res.status(400).json({
-        error: 'Contraseña inválida: máximo 10 caracteres, 1 mayúscula, 1 número y 1 símbolo',
+        error: 'Contraseña inválida: requiere al menos 1 mayúscula, 1 número y 1 símbolo',
       });
     }
 
@@ -333,6 +334,40 @@ app.post('/alerts', async (req, res) => {
     const { latitude, longitude, descripcion } = req.body;
     if (typeof latitude !== 'number' || typeof longitude !== 'number') {
       return res.status(400).json({ error: 'Latitud y longitud son requeridas' });
+    }
+
+    const activeAlert = await pool.query(
+      `SELECT id, estado, created_at
+       FROM alerts
+       WHERE user_id = $1 AND estado IN ('pendiente', 'en_proceso')
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [auth.user.id],
+    );
+
+    if (activeAlert.rows.length > 0) {
+      return res.status(409).json({
+        error: 'Ya tienes una alerta activa. Espera a que sea atendida antes de enviar otra.',
+        activeAlertId: activeAlert.rows[0].id,
+      });
+    }
+
+    const recentAlert = await pool.query(
+      `SELECT id,
+              GREATEST(1, CEIL($2 - EXTRACT(EPOCH FROM (NOW() - created_at))))::INT AS "retryAfterSeconds"
+       FROM alerts
+       WHERE user_id = $1
+         AND created_at >= NOW() - ($2 * INTERVAL '1 second')
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [auth.user.id, alertCooldownSeconds],
+    );
+
+    if (recentAlert.rows.length > 0) {
+      return res.status(429).json({
+        error: `Espera ${recentAlert.rows[0].retryAfterSeconds}s antes de enviar otra alerta.`,
+        retryAfterSeconds: recentAlert.rows[0].retryAfterSeconds,
+      });
     }
 
     const insert = await pool.query(
