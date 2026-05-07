@@ -41,6 +41,45 @@ const alertPriorities = ['falsa_alarma', 'baja', 'media', 'alta', 'urgente'];
 const mobileRoles = ['student', 'professor'];
 const securityRoles = ['security', 'admin'];
 const alertCooldownSeconds = Number(process.env.ALERT_COOLDOWN_SECONDS || 30);
+const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
+const SUPABASE_BUCKET = process.env.SUPABASE_STORAGE_BUCKET || 'profile-photos';
+
+const uploadProfilePhoto = async (userId, base64DataUrl) => {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    throw new Error('Supabase Storage no configurado');
+  }
+
+  const match = base64DataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) {
+    throw new Error('Formato de imagen inválido');
+  }
+
+  const mimeType = match[1];
+  const buffer = Buffer.from(match[2], 'base64');
+  const ext = mimeType.split('/')[1]?.replace('jpeg', 'jpg') ?? 'jpg';
+  const filename = `user_${userId}_${Date.now()}.${ext}`;
+
+  const response = await fetch(
+    `${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/${filename}`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'Content-Type': mimeType,
+        'x-upsert': 'true',
+      },
+      body: buffer,
+    },
+  );
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Error subiendo foto a Storage: ${err}`);
+  }
+
+  return `${SUPABASE_URL}/storage/v1/object/public/${SUPABASE_BUCKET}/${filename}`;
+};
 
 const generateToken = (user) => {
   return jwt.sign(
@@ -306,6 +345,11 @@ app.put('/auth/me', async (req, res) => {
       });
     }
 
+    let resolvedFotoUrl = fotoUrl || null;
+    if (fotoUrl && fotoUrl.startsWith('data:')) {
+      resolvedFotoUrl = await uploadProfilePhoto(auth.user.id, fotoUrl);
+    }
+
     const passwordHash = password ? await bcrypt.hash(password, 10) : null;
     const update = await pool.query(
       `UPDATE users
@@ -313,7 +357,7 @@ app.put('/auth/me', async (req, res) => {
            foto_url = COALESCE($2, foto_url)
        WHERE id = $3
        RETURNING id, email, nombre, matricula, role, vigente, foto_url, created_at`,
-      [passwordHash, fotoUrl, auth.user.id],
+      [passwordHash, resolvedFotoUrl, auth.user.id],
     );
 
     return res.json({ success: true, usuario: mapUser(update.rows[0]) });
