@@ -1,53 +1,18 @@
 /**
  * Email Service - OnAlert
- * Servicio centralizado para envío de notificaciones por email
+ * Usa Resend (HTTPS) en lugar de SMTP directo (bloqueado en Render free tier)
  */
 
-const nodemailer = require('nodemailer');
-const dns = require('dns');
+const { Resend } = require('resend');
 const emailTemplates = require('../templates/emailTemplates');
 
-// Forzar IPv4 globalmente (Render free tier no soporta IPv6 outbound)
-dns.setDefaultResultOrder('ipv4first');
+let resendClient = null;
 
-// Configuración de transporte
-let transporter = null;
-
-/**
- * Resolver hostname a IPv4 para evitar que nodemailer use IPv6
- */
-function resolveIPv4(hostname) {
-  return new Promise((resolve) => {
-    dns.resolve4(hostname, (err, addresses) => {
-      if (err || !addresses || addresses.length === 0) resolve(hostname);
-      else resolve(addresses[0]);
-    });
-  });
-}
-
-/**
- * Inicializar transporte de email
- */
-async function initializeTransporter() {
-  if (transporter) return transporter;
-
-  const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
-  const resolvedHost = await resolveIPv4(smtpHost);
-  console.log(`[Email] SMTP host resuelto: ${smtpHost} → ${resolvedHost}`);
-
-  transporter = nodemailer.createTransport({
-    host: resolvedHost,
-    port: 465,   // puerto 587 bloqueado en Render free tier
-    secure: true, // SSL directo en 465
-    family: 4,
-    tls: { servername: smtpHost },
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-  });
-
-  return transporter;
+function getResendClient() {
+  if (!resendClient) {
+    resendClient = new Resend(process.env.RESEND_API_KEY);
+  }
+  return resendClient;
 }
 
 /**
@@ -60,36 +25,40 @@ function getRecipients() {
 }
 
 /**
- * Validar que SMTP esté configurado
+ * Validar que Resend esté configurado
  */
 function isEmailConfigured() {
-  return !!(process.env.SMTP_USER && process.env.SMTP_PASS);
+  return !!process.env.RESEND_API_KEY;
 }
 
 /**
- * Enviar email genérico
+ * Enviar email genérico usando Resend
  */
-async function sendEmail({ to, subject, html, replyTo }) {
+async function sendEmail({ to, subject, html }) {
   try {
     if (!isEmailConfigured()) {
-      console.warn('[Email] Email no configurado. Saltando envío de:', subject);
+      console.warn('[Email] RESEND_API_KEY no configurado. Saltando envío de:', subject);
       return { success: false, reason: 'Email not configured' };
     }
 
-    const transporter = await initializeTransporter();
+    const resend = getResendClient();
     const recipients = Array.isArray(to) ? to : [to];
 
-    const result = await transporter.sendMail({
-      from: `"OnAlert Sistema" <${process.env.SMTP_USER}>`,
-      to: recipients.join(', '),
+    const { data, error } = await resend.emails.send({
+      from: 'OnAlert Sistema <onboarding@resend.dev>',
+      to: recipients,
       subject,
       html,
-      replyTo: replyTo || process.env.SMTP_USER,
     });
+
+    if (error) {
+      console.error('[Email] ❌ Error Resend:', error.message);
+      return { success: false, error: error.message };
+    }
 
     console.log(`[Email] ✅ Correo enviado: ${subject}`);
     console.log(`[Email] Destinatarios: ${recipients.join(', ')}`);
-    return { success: true, messageId: result.messageId };
+    return { success: true, messageId: data.id };
   } catch (error) {
     console.error('[Email] ❌ Error enviando correo:', error.message);
     return { success: false, error: error.message };
@@ -101,7 +70,7 @@ async function sendEmail({ to, subject, html, replyTo }) {
  */
 async function sendIncidentReport({ alert, guardName }) {
   if (!isEmailConfigured()) {
-    console.log('[Email] Configuración de SMTP no encontrada. Saltando envío de reporte.');
+    console.log('[Email] RESEND_API_KEY no encontrada. Saltando envío de reporte.');
     return { success: false, reason: 'Email not configured' };
   }
 
