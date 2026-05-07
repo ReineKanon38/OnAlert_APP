@@ -4,22 +4,43 @@
  */
 
 const nodemailer = require('nodemailer');
+const dns = require('dns');
 const emailTemplates = require('../templates/emailTemplates');
+
+// Forzar IPv4 globalmente (Render free tier no soporta IPv6 outbound)
+dns.setDefaultResultOrder('ipv4first');
 
 // Configuración de transporte
 let transporter = null;
 
 /**
+ * Resolver hostname a IPv4 para evitar que nodemailer use IPv6
+ */
+function resolveIPv4(hostname) {
+  return new Promise((resolve) => {
+    dns.resolve4(hostname, (err, addresses) => {
+      if (err || !addresses || addresses.length === 0) resolve(hostname);
+      else resolve(addresses[0]);
+    });
+  });
+}
+
+/**
  * Inicializar transporte de email
  */
-function initializeTransporter() {
+async function initializeTransporter() {
   if (transporter) return transporter;
 
+  const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const resolvedHost = await resolveIPv4(smtpHost);
+  console.log(`[Email] SMTP host resuelto: ${smtpHost} → ${resolvedHost}`);
+
   transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    host: resolvedHost,
     port: parseInt(process.env.SMTP_PORT || '587'),
-    secure: process.env.SMTP_SECURE === 'true', // false para TLS, true para SSL
-    family: 4, // forzar IPv4 (Render free tier no soporta IPv6 outbound)
+    secure: process.env.SMTP_SECURE === 'true',
+    family: 4,
+    tls: { servername: smtpHost }, // SNI correcto aunque usemos IP
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
@@ -55,7 +76,7 @@ async function sendEmail({ to, subject, html, replyTo }) {
       return { success: false, reason: 'Email not configured' };
     }
 
-    const transporter = initializeTransporter();
+    const transporter = await initializeTransporter();
     const recipients = Array.isArray(to) ? to : [to];
 
     const result = await transporter.sendMail({
