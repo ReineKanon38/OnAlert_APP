@@ -4,6 +4,61 @@ Sistema institucional de alertas en tiempo real para el TESCH (Tecnológico de E
 
 ---
 
+## Diagrama de arquitectura
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        CLIENTES                                  │
+│                                                                  │
+│  ┌──────────────────┐          ┌──────────────────────────────┐ │
+│  │  App Móvil        │          │  Dashboard Guardias          │ │
+│  │  Flutter (arm64)  │          │  React + Vite + TypeScript   │ │
+│  │                  │          │  Vercel                      │ │
+│  │  Alumno/Profesor  │          │  security / admin            │ │
+│  │  → HomeScreen     │          │  → Vista alertas tiempo real │ │
+│  │                  │          └──────────┬───────────────────┘ │
+│  │  Guardia         │                     │                      │
+│  │  → GuardScreen   │                     │                      │
+│  └────────┬─────────┘                     │                      │
+└───────────┼───────────────────────────────┼─────────────────────┘
+            │  REST + WebSocket             │  REST + WebSocket
+            ▼                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                  BACKEND — Render (Node.js)                      │
+│           https://onalert-api.onrender.com                       │
+│                                                                  │
+│  Express 5  │  Socket.IO  │  JWT Auth  │  Swagger /docs          │
+│                                                                  │
+│  POST /alerts ──► emit('new-alert') ──► todos los clientes WS   │
+│  PATCH /alerts/:id/status ──► emit('alert-updated') ──► todos   │
+│                           └──► sendIncidentReport() [email]     │
+└──────┬──────────┬──────────────┬──────────────────┬────────────┘
+       │          │              │                  │
+       ▼          ▼              ▼                  ▼
+┌──────────┐ ┌─────────┐ ┌───────────────┐ ┌─────────────────┐
+│PostgreSQL│ │Supabase │ │   Firebase    │ │  Gmail SMTP     │
+│Supabase  │ │Storage  │ │   FCM (v1)    │ │  Nodemailer     │
+│          │ │         │ │               │ │                 │
+│ users    │ │profile- │ │ Push notif.  │ │ Reporte PDF     │
+│ alerts   │ │photos   │ │ a guardias    │ │ a coordinadores │
+│ logs     │ │(fotos)  │ │ en Android    │ │ al cerrar       │
+└──────────┘ └─────────┘ └───────────────┘ └─────────────────┘
+```
+
+**Flujo principal de una alerta:**
+```
+Alumno pulsa "Enviar alerta"
+  → POST /alerts (REST, con GPS + idempotency_key)
+    → INSERT en PostgreSQL
+    → io.emit('new-alert') — WebSocket a Dashboard y GuardHomeScreen
+    → FCM push notification a guardias con token registrado
+  → Guardia atiende → PATCH /alerts/:id/status
+    → io.emit('alert-updated') — actualiza app y dashboard
+    → Si estado = cerrada/falsa_alarma → email a coordinadores
+```
+
+---
+
 ## Arquitectura
 
 ```
