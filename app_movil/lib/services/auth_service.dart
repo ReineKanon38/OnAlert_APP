@@ -1,3 +1,4 @@
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
@@ -42,7 +43,9 @@ class AuthService {
       return decoded;
     }
 
-    throw const FormatException('La respuesta del servidor no es un objeto JSON valido.');
+    throw const FormatException(
+      'La respuesta del servidor no es un objeto JSON valido.',
+    );
   }
 
   static String _extractResponseError(http.Response response, String fallback) {
@@ -153,12 +156,33 @@ class AuthService {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(_tokenKey, token);
 
+        // Registrar token FCM en el backend (fire-and-forget)
+        _registerFcmToken(token);
+
         return {'success': true, 'usuario': data['usuario']};
       } else {
         return {'success': false, 'error': jsonDecode(response.body)['error']};
       }
     } catch (e) {
-      return {'success': false, 'error': 'Error de conexión: $e'};
+      return {'success': false, 'error': 'Error de conexi\u00f3n: $e'};
+    }
+  }
+
+  /// Registra el token FCM del dispositivo en el backend.
+  static Future<void> _registerFcmToken(String authToken) async {
+    try {
+      final fcmToken = await FirebaseMessaging.instance.getToken();
+      if (fcmToken == null) return;
+      await http.post(
+        Uri.parse('$baseUrl/auth/fcm-token'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $authToken',
+        },
+        body: jsonEncode({'token': fcmToken}),
+      );
+    } catch (_) {
+      // No crítico — no interrumpir login si falla
     }
   }
 
@@ -292,10 +316,7 @@ class AuthService {
       final key = idempotencyKey ?? _uuid.v4();
       final response = await http.post(
         Uri.parse('$baseUrl/alerts'),
-        headers: {
-          ...await _authHeaders(),
-          'X-Idempotency-Key': key,
-        },
+        headers: {...await _authHeaders(), 'X-Idempotency-Key': key},
         body: jsonEncode({
           'latitude': latitude,
           'longitude': longitude,
@@ -332,7 +353,9 @@ class AuthService {
 
       return {
         'success': false,
-        'error': data['error'] ?? _extractResponseError(response, 'Error al emitir alerta'),
+        'error':
+            data['error'] ??
+            _extractResponseError(response, 'Error al emitir alerta'),
       };
     } on FormatException {
       return {
