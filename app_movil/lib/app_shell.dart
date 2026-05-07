@@ -16,6 +16,7 @@ import 'core/widgets/app_logo.dart';
 import 'core/widgets/brand_background.dart';
 import 'core/widgets/oa_primary_button.dart';
 import 'features/alerts/alert_status_pill.dart';
+import 'features/guard/guard_home_screen.dart';
 import 'services/auth_service.dart';
 import 'services/socket_service.dart';
 
@@ -71,9 +72,15 @@ class _SplashScreenState extends State<SplashScreen> {
     }
 
     if (profile['success'] == true) {
+      final user = profile['usuario'] as Map<String, dynamic>? ?? {};
+      final role = user['role']?.toString() ?? '';
+      final isGuard = role == 'security' || role == 'admin';
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        MaterialPageRoute(
+          builder: (_) =>
+              isGuard ? GuardHomeScreen(user: user) : const HomeScreen(),
+        ),
       );
     } else {
       await AuthService.logout();
@@ -226,10 +233,26 @@ class _LoginScreenState extends State<LoginScreen> {
 
     final user = result['usuario'] as Map<String, dynamic>;
     final role = user['role']?.toString() ?? '';
+    final isGuard = role == 'security' || role == 'admin';
+
+    if (!mounted) {
+      return;
+    }
+
+    // Guardia → su propia pantalla (no conectar websocket de alumno)
+    if (isGuard) {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => GuardHomeScreen(user: user)),
+        (_) => false,
+      );
+      return;
+    }
+
     if (role != 'student' && role != 'professor') {
       await AuthService.logout();
       setState(() {
-        errorMsg = 'La app movil es solo para alumnado/profesorado.';
+        errorMsg = 'Rol no reconocido. Contacta al administrador.';
       });
       return;
     }
@@ -1153,9 +1176,7 @@ class _PanicButtonScreenState extends State<PanicButtonScreen> {
     }
 
     return Geolocator.getCurrentPosition(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-      ),
+      locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
     );
   }
 
