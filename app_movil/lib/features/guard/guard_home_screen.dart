@@ -74,6 +74,18 @@ class _GuardHomeScreenState extends State<GuardHomeScreen>
       _triggerAlertVibration();
     });
 
+    // Actualizar alerta existente cuando el dashboard cambia su estado
+    _socket.on('alert-updated', (data) {
+      if (!mounted) return;
+      final updated = Map<String, dynamic>.from(data as Map);
+      setState(() {
+        final idx = _alerts.indexWhere((a) => a['id'] == updated['id']);
+        if (idx >= 0) {
+          _alerts[idx] = updated;
+        }
+      });
+    });
+
     _socket.connect();
   }
 

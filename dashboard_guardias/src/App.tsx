@@ -6,7 +6,7 @@ import type { Alert, Summary, User } from './types';
 import { AlertsList } from './components/AlertsList';
 import { AlertDetail } from './components/AlertDetail';
 
-const SOCKET_URL = 'http://127.0.0.1:3000';
+const SOCKET_URL = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:3000';
 
 // ─── Summary Card Component ───────────────────────────────────────────────────
 function SummaryCard({ title, value, accent }: { title: string; value: number; accent?: string }) {
@@ -118,6 +118,7 @@ export default function App() {
   const [password, setPassword] = useState('Guardia123#');
   const socketRef = useRef<Socket | null>(null);
   const [socketConnected, setSocketConnected] = useState(false);
+  const [mobileGuardsOnline, setMobileGuardsOnline] = useState<number[]>([]);
   const [incomingAlert, setIncomingAlert] = useState<Alert | null>(null);
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
   const [view, setView] = useState<'list' | 'detail'>('list');
@@ -220,7 +221,10 @@ export default function App() {
     });
 
     socket.on('guard-status', (data) => {
-      console.log('[Socket] Estado de guardias:', data);
+      console.log('[Socket] Estado de guardias móviles:', data);
+      if (Array.isArray(data.connected)) {
+        setMobileGuardsOnline(data.connected);
+      }
     });
 
     socket.on('disconnect', () => {
@@ -405,6 +409,9 @@ export default function App() {
             <small>{user.role}</small>
             <small className={`socket-status ${socketConnected ? 'connected' : 'disconnected'}`}>
               {socketConnected ? '● En línea' : '○ Desconectado'}
+            </small>
+            <small className="mobile-guards-status">
+              📱 {mobileGuardsOnline.length} guardia{mobileGuardsOnline.length !== 1 ? 's' : ''} móvil{mobileGuardsOnline.length !== 1 ? 'es' : ''} conectado{mobileGuardsOnline.length !== 1 ? 's' : ''}
             </small>
           </div>
           <button

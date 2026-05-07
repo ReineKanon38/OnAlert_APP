@@ -277,6 +277,17 @@ button:disabled {
   color: #b42318;
 }
 
+.mobile-guards-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 12px;
+  background: #e8f4fd;
+  color: #1565c0;
+}
+
 /* ─── Modal de Alerta Entrante ──────────────────────────────────────────────── */
 .alert-modal-overlay {
   position: fixed;

@@ -651,13 +651,34 @@ app.patch('/alerts/:id/status', async (req, res) => {
       observacion,
     });
 
-      // Emitir cambio de estado a todos los clientes WebSocket
-      const alertForSocket = {
-        ...updatedAlert,
-        usuario: auth.user.nombre,
-        email: auth.user.email,
-      };
-      io.emit('alert-updated', alertForSocket);
+      // Emitir cambio de estado con datos completos a todos los clientes WebSocket
+      const fullAlertResult = await pool.query(
+        `SELECT a.*, u.nombre, u.email, u.role, u.foto_url
+         FROM alerts a JOIN users u ON a.user_id = u.id
+         WHERE a.id = $1`,
+        [updatedAlert.id],
+      );
+      if (fullAlertResult.rows.length > 0) {
+        const row = fullAlertResult.rows[0];
+        const alertForSocket = {
+          id: row.id,
+          userId: row.user_id,
+          usuario: row.nombre,
+          email: row.email,
+          role: row.role,
+          latitude: row.latitude,
+          longitude: row.longitude,
+          descripcion: row.descripcion,
+          estado: row.estado,
+          prioridad: row.prioridad,
+          observacion: row.observacion,
+          handledBy: row.handled_by,
+          fotoUrl: row.foto_url,
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+        };
+        io.emit('alert-updated', alertForSocket);
+      }
 
       // Enviar reporte por email al cerrar el incidente
       if (['cerrada', 'falsa_alarma'].includes(estado)) {
@@ -1064,11 +1085,46 @@ io.on('connection', (socket) => {
   });
 
   // Cuando un guardia cambia el estado de una alerta
-  socket.on('alert-status-changed', (statusData) => {
+  socket.on('alert-status-changed', async (statusData) => {
     console.log(`[Socket] Estado de alerta actualizado:`, statusData);
     
-    // Notificar a todos (incluyendo mobile) que el estado cambió
-    io.emit('alert-updated', statusData);
+    try {
+      // Obtener alerta completa desde BD para sincronizar todos los clientes
+      const result = await pool.query(
+        `SELECT a.*, u.nombre, u.email, u.role, u.foto_url
+         FROM alerts a
+         JOIN users u ON a.user_id = u.id
+         WHERE a.id = $1`,
+        [statusData.id]
+      );
+      if (result.rows.length > 0) {
+        const row = result.rows[0];
+        const fullAlert = {
+          id: row.id,
+          userId: row.user_id,
+          usuario: row.nombre,
+          email: row.email,
+          role: row.role,
+          latitude: row.latitude,
+          longitude: row.longitude,
+          descripcion: row.descripcion,
+          estado: row.estado,
+          prioridad: row.prioridad,
+          observacion: row.observacion,
+          handledBy: row.handled_by,
+          fotoUrl: row.foto_url,
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+        };
+        io.emit('alert-updated', fullAlert);
+      } else {
+        // Fallback: emitir los datos parciales
+        io.emit('alert-updated', statusData);
+      }
+    } catch (err) {
+      console.error('[Socket] Error fetching alert on status change:', err.message);
+      io.emit('alert-updated', statusData);
+    }
   });
 
   // Desconexión
