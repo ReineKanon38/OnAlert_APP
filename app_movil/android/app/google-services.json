@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "653948428326",
+    "project_id": "onalert-7082f",
+    "storage_bucket": "onalert-7082f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:653948428326:android:4c1d3919f4f041051686e7",
+        "android_client_info": {
+          "package_name": "com.example.app_movil"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC7_A9l22MhoD-WQR5c9wy-QZ-qO3b23xs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
