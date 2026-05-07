@@ -37,10 +37,10 @@ async function initializeTransporter() {
 
   transporter = nodemailer.createTransport({
     host: resolvedHost,
-    port: parseInt(process.env.SMTP_PORT || '587'),
-    secure: process.env.SMTP_SECURE === 'true',
+    port: 465,   // puerto 587 bloqueado en Render free tier
+    secure: true, // SSL directo en 465
     family: 4,
-    tls: { servername: smtpHost }, // SNI correcto aunque usemos IP
+    tls: { servername: smtpHost },
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
