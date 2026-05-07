@@ -1,6 +1,6 @@
 import type { Alert, Summary, User } from './types';
 
-const API_BASE = 'http://127.0.0.1:3000';
+const API_BASE = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:3000';
 const STORAGE_KEY = 'onalert-dashboard-token';
 
 export const getToken = () => localStorage.getItem(STORAGE_KEY);
