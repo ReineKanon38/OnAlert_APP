@@ -191,7 +191,6 @@ async function sendGuardOnlineNotification({ guardName, adminEmails }) {
 }
 
 module.exports = {
-  initializeTransporter,
   isEmailConfigured,
   getRecipients,
   sendEmail,
