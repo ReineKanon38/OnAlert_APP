@@ -10,4 +10,3 @@ void main() async {
   NotificationService.registerBackgroundHandler();
   runApp(const OnAlertApp());
 }
-

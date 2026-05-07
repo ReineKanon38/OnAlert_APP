@@ -24,10 +24,10 @@ class NotificationService {
       // Foreground: mostrar notificaciones aunque la app esté abierta
       await FirebaseMessaging.instance
           .setForegroundNotificationPresentationOptions(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
+            alert: true,
+            badge: true,
+            sound: true,
+          );
 
       final token = await _fcm.getToken();
       debugPrint('[FCM] Token: $token');

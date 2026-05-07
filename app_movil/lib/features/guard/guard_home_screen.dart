@@ -167,7 +167,7 @@ class _GuardHomeScreenState extends State<GuardHomeScreen>
             child: Center(
               child: AnimatedBuilder(
                 animation: _pulseAnimation,
-                builder: (_, __) => Container(
+                builder: (_, _) => Container(
                   width: 10,
                   height: 10,
                   decoration: BoxDecoration(
