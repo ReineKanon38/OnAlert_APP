@@ -1,10 +1,13 @@
 class Validators {
+  static const _allowedDomains = ['tesch.edu.mx', 'onalert.local'];
+
   static String? institutionalEmail(String value) {
-    final email = value.trim();
+    final email = value.trim().toLowerCase();
     if (email.isEmpty) {
       return 'Escribe tu correo institucional';
     }
-    if (!email.toLowerCase().endsWith('@tesch.edu.mx')) {
+    final allowed = _allowedDomains.any((d) => email.endsWith('@$d'));
+    if (!allowed) {
       return 'Debe terminar en @tesch.edu.mx';
     }
     return null;
