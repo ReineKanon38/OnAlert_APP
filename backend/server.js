@@ -163,6 +163,8 @@ const initSchema = async () => {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS vigente BOOLEAN NOT NULL DEFAULT TRUE;`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS foto_url TEXT;`);
   await pool.query(`ALTER TABLE alerts ADD COLUMN IF NOT EXISTS prioridad TEXT NOT NULL DEFAULT 'media';`);
+  await pool.query(`ALTER TABLE alerts ADD COLUMN IF NOT EXISTS idempotency_key TEXT;`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS alerts_idempotency_key_idx ON alerts (idempotency_key) WHERE idempotency_key IS NOT NULL;`);
 
   const seedEmail = process.env.SECURITY_SEED_EMAIL || 'guardia@onalert.local';
   const seedPassword = process.env.SECURITY_SEED_PASSWORD || 'Guardia123#';
@@ -332,8 +334,23 @@ app.post('/alerts', async (req, res) => {
     }
 
     const { latitude, longitude, descripcion } = req.body;
+    const idempotencyKey = req.headers['x-idempotency-key'] || null;
+
     if (typeof latitude !== 'number' || typeof longitude !== 'number') {
       return res.status(400).json({ error: 'Latitud y longitud son requeridas' });
+    }
+
+    if (idempotencyKey) {
+      const existing = await pool.query(
+        `SELECT id, user_id AS "userId", latitude, longitude, descripcion, estado, prioridad,
+                observacion, handled_by AS "handledBy", created_at AS "createdAt", updated_at AS "updatedAt"
+         FROM alerts
+         WHERE idempotency_key = $1`,
+        [idempotencyKey],
+      );
+      if (existing.rows.length > 0) {
+        return res.json({ alerta: existing.rows[0], deduplicated: true });
+      }
     }
 
     const activeAlert = await pool.query(
@@ -371,11 +388,11 @@ app.post('/alerts', async (req, res) => {
     }
 
     const insert = await pool.query(
-      `INSERT INTO alerts (user_id, latitude, longitude, descripcion, estado, prioridad)
-       VALUES ($1, $2, $3, $4, 'pendiente', 'media')
+      `INSERT INTO alerts (user_id, latitude, longitude, descripcion, estado, prioridad, idempotency_key)
+       VALUES ($1, $2, $3, $4, 'pendiente', 'media', $5)
        RETURNING id, user_id AS "userId", latitude, longitude, descripcion, estado, prioridad,
                  observacion, handled_by AS "handledBy", created_at AS "createdAt", updated_at AS "updatedAt"`,
-      [auth.user.id, latitude, longitude, descripcion || 'Alerta emitida desde app móvil'],
+      [auth.user.id, latitude, longitude, descripcion || 'Alerta emitida desde app móvil', idempotencyKey],
     );
 
     const alert = insert.rows[0];

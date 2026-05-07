@@ -5,6 +5,7 @@ import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 
 import 'core/config/app_config.dart';
 import 'core/theme/app_colors.dart';
@@ -1171,6 +1172,7 @@ class _PanicButtonScreenState extends State<PanicButtonScreen> {
       isSendingAlert = true;
     });
 
+    final idempotencyKey = const Uuid().v4();
     final countdownNotifier = ValueNotifier<int>(3);
     final locationFuture = _prepareLocationForAlert();
 
@@ -1199,6 +1201,7 @@ class _PanicButtonScreenState extends State<PanicButtonScreen> {
       final result = await AuthService.sendAlert(
         latitude: position.latitude,
         longitude: position.longitude,
+        idempotencyKey: idempotencyKey,
       );
 
       if (!mounted) {

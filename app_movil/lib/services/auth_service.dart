@@ -1,5 +1,6 @@
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 import 'dart:convert';
 
 import '../core/config/app_config.dart';
@@ -11,6 +12,7 @@ class AuthService {
 
   static Map<String, dynamic>? _mockUser;
   static final List<Map<String, dynamic>> _mockAlerts = [];
+  static const _uuid = Uuid();
 
   static Future<Map<String, String>> _authHeaders() async {
     final token = await getToken();
@@ -261,6 +263,7 @@ class AuthService {
     required double latitude,
     required double longitude,
     String? descripcion,
+    String? idempotencyKey,
   }) async {
     if (AppConfig.useMockData) {
       final createdAt = DateTime.now().toIso8601String();
@@ -286,9 +289,13 @@ class AuthService {
     }
 
     try {
+      final key = idempotencyKey ?? _uuid.v4();
       final response = await http.post(
         Uri.parse('$baseUrl/alerts'),
-        headers: await _authHeaders(),
+        headers: {
+          ...await _authHeaders(),
+          'X-Idempotency-Key': key,
+        },
         body: jsonEncode({
           'latitude': latitude,
           'longitude': longitude,
