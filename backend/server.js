@@ -42,11 +42,11 @@ const mobileRoles = ['student', 'professor'];
 const securityRoles = ['security', 'admin'];
 const alertCooldownSeconds = Number(process.env.ALERT_COOLDOWN_SECONDS || 30);
 const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY || '';
 const SUPABASE_BUCKET = process.env.SUPABASE_STORAGE_BUCKET || 'profile-photos';
 
 const uploadProfilePhoto = async (userId, base64DataUrl) => {
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
     throw new Error('Supabase Storage no configurado');
   }
 
@@ -65,7 +65,7 @@ const uploadProfilePhoto = async (userId, base64DataUrl) => {
     {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
         'Content-Type': mimeType,
         'x-upsert': 'true',
       },
