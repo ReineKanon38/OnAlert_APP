@@ -240,6 +240,8 @@ const initSchema = async () => {
   await pool.query(`ALTER TABLE alerts ADD COLUMN IF NOT EXISTS idempotency_key TEXT;`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS alerts_idempotency_key_idx ON alerts (idempotency_key) WHERE idempotency_key IS NOT NULL;`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS fcm_token TEXT;`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_alerts_user_id ON alerts (user_id);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_alert_status_logs_alert_id ON alert_status_logs (alert_id);`);
 
   const seedEmail = process.env.SECURITY_SEED_EMAIL || 'guardia@onalert.local';
   const seedPassword = process.env.SECURITY_SEED_PASSWORD || 'Guardia123#';
