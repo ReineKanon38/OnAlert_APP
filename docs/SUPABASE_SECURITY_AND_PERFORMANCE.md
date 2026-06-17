@@ -1,163 +1,132 @@
-# Guía de Optimización y Seguridad de la Base de Datos (Supabase)
+# Guía de Optimización y Seguridad de la Base de Datos (Supabase) - OnAlert
 
-Esta guía contiene las explicaciones y los scripts SQL necesarios para resolver las alertas de rendimiento y seguridad reportadas en el panel de control de Supabase para el proyecto **OnAlert**.
+Esta guía contiene el script SQL y las explicaciones técnicas para depurar y asegurar la base de datos de tu proyecto, eliminando cualquier rastro de otros proyectos (como ScanFace) y aplicando políticas de seguridad (RLS) avanzadas de rendimiento y control de acceso específicas para **OnAlert**.
 
 ---
 
-## 📋 Resumen de Acciones Requeridas
-
-1. **Activar RLS (Row Level Security)** en las tablas `students` y `attendance_logs`.
-2. **Crear Políticas RLS** para las tablas que tienen RLS activo pero carecen de políticas (`alert_status_logs`, `alerts`, `users`, `students`, `attendance_logs`).
-3. **Mover Extensiones del Esquema Público**: Cambiar la extensión `vector` al esquema `extensions` para mejorar la seguridad del esquema público.
-4. **Restringir Funciones Privilegiadas (SECURITY DEFINER)**: Revocar permisos de ejecución pública sobre la función `public.rls_auto_enable()`.
-5. **Crear Índices para Claves Foráneas**: Indexar las claves foráneas en `alerts`, `alert_status_logs` y `attendance_logs` para evitar escaneos secuenciales lentos.
+## ⚠️ ADVERTENCIA: Pérdida Irreversible de Datos
+La ejecución del bloque de limpieza de este script **eliminará permanentemente** las tablas de base de datos y la extensión de vectores correspondientes al proyecto ScanFace. Asegúrate de respaldar sus datos si los necesitas antes de proceder.
 
 ---
 
 ## ⚡ Script SQL Completo (Copiar y Pegar en el SQL Editor de Supabase)
 
-Puedes ejecutar todo este bloque de código directamente en el **SQL Editor** de Supabase para aplicar todas las mejoras de una sola vez:
+Ejecuta este script completo en la consola de Supabase para limpiar las tablas de otros proyectos y blindar las tablas de **OnAlert**:
 
 ```sql
 -- =====================================================================
--- 1. EXTENSIONES (Mover vector a un esquema propio de extensiones)
+-- 1. LIMPIEZA DE TABLAS Y DEPENDENCIAS AJENAS A ONALERT (SCANFACE)
 -- =====================================================================
-CREATE SCHEMA IF NOT EXISTS extensions;
-ALTER EXTENSION vector SET SCHEMA extensions;
-
-
--- =====================================================================
--- 2. SEGURIDAD DE FUNCIONES (Revocar ejecución pública de SECURITY DEFINER)
--- =====================================================================
--- Por seguridad, las funciones con SECURITY DEFINER no deben ser ejecutadas
--- directamente por usuarios anónimos (public) ni autenticados a menos que sea necesario.
-REVOKE EXECUTE ON FUNCTION public.rls_auto_enable() FROM public;
-REVOKE EXECUTE ON FUNCTION public.rls_auto_enable() FROM authenticated;
+-- Elimina de forma permanente las tablas de asistencia, estudiantes y la extensión vector
+DROP TABLE IF EXISTS public.attendance_logs CASCADE;
+DROP TABLE IF EXISTS public.students CASCADE;
+DROP EXTENSION IF EXISTS vector CASCADE;
 
 
 -- =====================================================================
--- 3. ACTIVAR ROW LEVEL SECURITY (RLS)
+-- 2. SEGURIDAD DE FUNCIONES (Revocar ejecución de SECURITY DEFINER)
 -- =====================================================================
-ALTER TABLE public.students ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.attendance_logs ENABLE ROW LEVEL SECURITY;
-
--- Nota: Las tablas users, alerts y alert_status_logs ya tienen RLS activado,
--- pero requieren políticas de acceso para no bloquear completamente las peticiones API.
+-- Revoca permisos de ejecución en rls_auto_enable() para usuarios públicos,
+-- anónimos y autenticados, previniendo accesos no autorizados.
+REVOKE EXECUTE ON FUNCTION public.rls_auto_enable() FROM PUBLIC, anon, authenticated;
 
 
 -- =====================================================================
--- 4. POLÍTICAS RLS (Para resolver "RLS Enabled No Policy")
+-- 3. ACTIVAR ROW LEVEL SECURITY (RLS) EN TABLAS DE ONALERT
+-- =====================================================================
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.alerts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.alert_status_logs ENABLE ROW LEVEL SECURITY;
+
+
+-- =====================================================================
+-- 4. POLÍTICAS RLS ROBUSTAS (Resuelve "Always True" y "Auth RLS Plan")
 -- =====================================================================
 
--- 4.1) Tabla: users
--- Permitir a usuarios autenticados leer los perfiles
+-- 4.1) Tabla: users (Perfiles de usuario)
+DROP POLICY IF EXISTS "Permitir lectura a usuarios autenticados" ON public.users;
 CREATE POLICY "Permitir lectura a usuarios autenticados" 
 ON public.users FOR SELECT 
 TO authenticated 
-USING (true);
+USING (
+  id::text = (SELECT auth.uid())::text OR
+  (SELECT role FROM public.users WHERE id::text = (SELECT auth.uid())::text) IN ('security', 'admin')
+);
 
--- Permitir a los usuarios modificar su propia información
+DROP POLICY IF EXISTS "Permitir actualización de perfil propio" ON public.users;
 CREATE POLICY "Permitir actualización de perfil propio" 
 ON public.users FOR UPDATE 
 TO authenticated 
-USING (auth.uid()::text = id::text);
+USING (((SELECT auth.uid())::text = id::text));
 
--- 4.2) Tabla: alerts
--- Permitir a usuarios autenticados ver las alertas
+
+-- 4.2) Tabla: alerts (Alertas de pánico)
+DROP POLICY IF EXISTS "Permitir lectura de alertas a usuarios autenticados" ON public.alerts;
 CREATE POLICY "Permitir lectura de alertas a usuarios autenticados" 
 ON public.alerts FOR SELECT 
 TO authenticated 
-USING (true);
+USING (
+  user_id::text = (SELECT auth.uid())::text OR
+  (SELECT role FROM public.users WHERE id::text = (SELECT auth.uid())::text) IN ('security', 'admin')
+);
 
--- Permitir a estudiantes y profesores insertar nuevas alertas
+DROP POLICY IF EXISTS "Permitir creación de alertas a usuarios autenticados" ON public.alerts;
 CREATE POLICY "Permitir creación de alertas a usuarios autenticados" 
 ON public.alerts FOR INSERT 
 TO authenticated 
-WITH CHECK (true);
+WITH CHECK (
+  user_id::text = (SELECT auth.uid())::text
+);
 
--- Permitir a guardias y administradores actualizar el estado de las alertas
+DROP POLICY IF EXISTS "Permitir actualización de alertas a personal de seguridad" ON public.alerts;
 CREATE POLICY "Permitir actualización de alertas a personal de seguridad" 
 ON public.alerts FOR UPDATE 
 TO authenticated 
-USING (true);
+USING (
+  (SELECT role FROM public.users WHERE id::text = (SELECT auth.uid())::text) IN ('security', 'admin')
+);
 
--- 4.3) Tabla: alert_status_logs
--- Permitir leer la bitácora de estados
+
+-- 4.3) Tabla: alert_status_logs (Bitácora de estados de alerta)
+DROP POLICY IF EXISTS "Permitir lectura de bitácora a usuarios autenticados" ON public.alert_status_logs;
 CREATE POLICY "Permitir lectura de bitácora a usuarios autenticados" 
 ON public.alert_status_logs FOR SELECT 
 TO authenticated 
-USING (true);
-
--- 4.4) Tabla: students
--- Permitir lectura de estudiantes a usuarios autenticados
-CREATE POLICY "Permitir lectura de estudiantes a usuarios autenticados" 
-ON public.students FOR SELECT 
-TO authenticated 
-USING (true);
-
--- 4.5) Tabla: attendance_logs
--- Permitir lectura y creación de logs de asistencia a usuarios autenticados
-CREATE POLICY "Permitir lectura de logs de asistencia a usuarios autenticados" 
-ON public.attendance_logs FOR SELECT 
-TO authenticated 
-USING (true);
-
-CREATE POLICY "Permitir inserción de logs de asistencia a usuarios autenticados" 
-ON public.attendance_logs FOR INSERT 
-TO authenticated 
-WITH CHECK (true);
-
-
--- =====================================================================
--- 5. RENDIMIENTO (Crear Índices para Claves Foráneas)
--- =====================================================================
-
--- Índices para la tabla alerts (user_id ya se añade automáticamente en el backend,
--- pero se incluye aquí en caso de que desees aplicarlo manualmente de inmediato)
-CREATE INDEX IF NOT EXISTS idx_alerts_user_id ON public.alerts(user_id);
-
--- Índices para la tabla alert_status_logs
-CREATE INDEX IF NOT EXISTS idx_alert_status_logs_alert_id ON public.alert_status_logs(alert_id);
-
--- Índices para la tabla attendance_logs (Claves foráneas supuestas)
--- Si la clave foránea apunta a la tabla students (por ejemplo, student_id)
-CREATE INDEX IF NOT EXISTS idx_attendance_logs_student_id ON public.attendance_logs(student_id);
-
--- En caso de que la clave foránea apunte a users(id) o similar:
--- CREATE INDEX IF NOT EXISTS idx_attendance_logs_user_id ON public.attendance_logs(user_id);
+USING (
+  (SELECT user_id FROM public.alerts WHERE id = alert_id)::text = (SELECT auth.uid())::text OR
+  (SELECT role FROM public.users WHERE id::text = (SELECT auth.uid())::text) IN ('security', 'admin')
+);
 ```
 
 ---
 
-## 🔍 Detalles Técnicos y Explicación de las Alertas
+## 🔍 Detalles Técnicos de las Advertencias Resueltas
 
-### 1. RLS Disabled in Public (`students`, `attendance_logs`)
-- **Problema**: Al no tener RLS activado, cualquier persona con acceso a la clave anónima (`anon key`) de la API de Supabase podría realizar consultas, insertar o borrar datos de estas tablas directamente sin pasar por las reglas de negocio del backend.
-- **Solución**: Al hacer `ENABLE ROW LEVEL SECURITY`, se activa el cortafuegos de Postgres. A partir de ahí, solo las peticiones con políticas explícitas o con permisos de administrador (`service_role`, que usa el backend) pueden interactuar con los datos.
+### 1. Limpieza de ScanFace (`students`, `attendance_logs`, `vector`)
+- **Razón**: Al separar la base de datos de otros proyectos, estas tablas y la extensión `vector` se eliminan por completo, liberando espacio en disco y reduciendo la complejidad del esquema.
+- **Acción**: `DROP ... CASCADE` remueve las tablas junto con cualquier índice, regla o política asociada a ellas.
 
-### 2. Extension in Public (`public.vector`)
-- **Problema**: Instalar extensiones (como `pgvector`) directamente en el esquema `public` llena el espacio de nombres público y puede exponer funciones internas de la extensión a accesos no deseados.
-- **Solución**: Mover la extensión a un esquema dedicado (como `extensions`) mantiene el esquema `public` ordenado y reduce la superficie de ataque.
+### 2. Auth RLS Initialization Plan (`users`)
+- **Problema**: El analizador de rendimiento de Supabase advierte que llamar funciones volátiles de autenticación como `auth.uid()` directamente en la cláusula `USING` obliga a PostgreSQL a re-evaluar la función por cada fila consultada, degradando críticamente el rendimiento de la tabla.
+- **Solución**: Envolver la función dentro de una subconsulta selectora `(SELECT auth.uid())` le indica a PostgreSQL que evalúe la expresión una sola vez y la trate como un valor constante para todo el plan de ejecución de la consulta.
 
-### 3. SECURITY DEFINER sin restricciones en `rls_auto_enable()`
-- **Problema**: Por defecto en PostgreSQL, las funciones creadas con la propiedad `SECURITY DEFINER` se ejecutan con los privilegios del usuario creador (normalmente el administrador). Si no se revocan los permisos de ejecución para el rol público (`public`), cualquier usuario podría mandar a llamar la función mediante la API de Supabase y forzar cambios de RLS u otras acciones.
-- **Solución**: Ejecutar `REVOKE EXECUTE` remueve este permiso a usuarios públicos y autenticados comunes, asegurando que solo el sistema/administrador pueda activarla.
+### 3. RLS Policy Always True (`alerts`, `attendance_logs`)
+- **Problema**: Las políticas creadas anteriormente tenían condiciones generales `USING (true)` que desactivaban en la práctica la protección de RLS para usuarios conectados, permitiendo a cualquier alumno ver las alertas de otros.
+- **Solución**: Se reescribieron las políticas para validar que la identidad del creador coincida con `(SELECT auth.uid())`, permitiendo el acceso general únicamente a personal autorizado con roles `'security'` o `'admin'`.
 
-### 4. RLS Enabled No Policy (`alert_status_logs`, `alerts`, `users`)
-- **Problema**: Si una tabla tiene RLS activo pero no tiene políticas, PostgREST (la API externa de Supabase) bloquea por completo todo el acceso a usuarios no administradores. Aunque tu backend Node.js funciona correctamente porque se conecta directamente mediante la cadena de conexión superusuario (`DATABASE_URL`), es una mala práctica no tener políticas si deseas usar el cliente de Supabase en el futuro.
-- **Solución**: Se crean políticas básicas asociadas al rol `authenticated` para permitir la consulta segura de la información relevante.
+### 4. Public Can Execute SECURITY DEFINER Function (`rls_auto_enable`)
+- **Problema**: PostgreSQL otorga permisos de ejecución a todos los usuarios (`PUBLIC` y `anon`) sobre funciones recién creadas por defecto. En funciones creadas con privilegios de administrador (`SECURITY DEFINER`), esto abre una brecha de seguridad grave.
+- **Solución**: `REVOKE EXECUTE ... FROM PUBLIC, anon, authenticated` bloquea de forma exhaustiva el acceso a cualquier rol no privilegiado.
 
-### 5. Unindexed foreign keys
-- **Problema**: Cuando eliminas o actualizas un registro en una tabla padre (por ejemplo, un usuario en `users`), PostgreSQL debe buscar en las tablas hijas (`alerts`, `attendance_logs`) si existen registros asociados. Sin un índice en la columna de la clave foránea, PostgreSQL tiene que hacer un escaneo completo secuencial de toda la tabla hija. Esto genera bloqueos y ralentizaciones críticas a medida que aumenta el volumen de datos.
-- **Solución**: La creación de índices (`idx_...`) permite búsquedas en milisegundos y resuelve la advertencia de rendimiento.
+### 5. Unused Index (`idx_alerts_user_id`, `idx_alert_status_logs_alert_id`)
+- **Explicación**: El panel de control de Supabase advierte que estos índices no registran consultas activas (`number_of_scans = 0`). **Esta advertencia es completamente normal** para índices creados recientemente y con poca actividad de datos.
+- **Acción**: **NO se deben borrar estos índices**. Son vitales para mantener la integridad referencial y asegurar que las operaciones de eliminación en cascada (`ON DELETE CASCADE`) y las uniones (`JOIN`) no causen escaneos de tablas completas a medida que el sistema crezca.
 
 ---
 
-## 🛠️ Pasos para aplicar e integrar en producción
+## 🛠️ Instrucciones de Despliegue
 
-1. Entra a tu proyecto en el panel de [Supabase](https://supabase.com).
-2. En la barra lateral izquierda, haz clic en **SQL Editor**.
-3. Haz clic en **New Query**.
-4. Copia el script SQL del apartado **"Script SQL Completo"** de este documento y pégalo en el editor.
-5. Presiona el botón **Run** (Ejecutar) en la esquina superior derecha.
-6. Ve a la sección **Database** -> **Advisors** (o el panel de alertas de seguridad/rendimiento) en Supabase para verificar que todas las advertencias han desaparecido.
+1. Accede a tu consola de [Supabase](https://supabase.com).
+2. Abre la sección de **SQL Editor** y haz clic en **New Query**.
+3. Pega el script anterior y presiona **Run**.
+4. Verifica en la pestaña **Database -> Advisors** que las alertas se hayan resuelto exitosamente.
